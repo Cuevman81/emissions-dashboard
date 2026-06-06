@@ -1450,8 +1450,8 @@ export default function EmissionsDashboard() {
                                               name="SO2 (Tons)"
                                               stroke="#3b82f6"
                                               strokeWidth={2}
-                                              dot={{ r: 3, strokeWidth: 1 }}
-                                              activeDot={{ r: 5, strokeWidth: 0 }}
+                                              dot={{ r: 3, strokeWidth: 1, stroke: '#3b82f6', fill: '#fff' }}
+                                              activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }}
                                             />
                                             <Line
                                               type="monotone"
@@ -1459,8 +1459,8 @@ export default function EmissionsDashboard() {
                                               name="NOx (Tons)"
                                               stroke="#f59e0b"
                                               strokeWidth={2}
-                                              dot={{ r: 3, strokeWidth: 1 }}
-                                              activeDot={{ r: 5, strokeWidth: 0 }}
+                                              dot={{ r: 3, strokeWidth: 1, stroke: '#f59e0b', fill: '#fff' }}
+                                              activeDot={{ r: 5, strokeWidth: 0, fill: '#f59e0b' }}
                                             />
                                           </LineChart>
                                         );

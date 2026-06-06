@@ -121,6 +121,33 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const CamdTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-slate-950/95 backdrop-blur-sm p-3 rounded-xl border border-slate-800 shadow-2xl text-[10px] text-white max-w-[160px] pointer-events-none">
+        <p className="font-bold border-b border-slate-800 pb-1 mb-1.5 text-center text-blue-400">{label} CAMD</p>
+        <div className="space-y-1.5">
+          {payload.map((item: any, index: number) => {
+            const val = item.value;
+            const formattedVal = val.toLocaleString(undefined, { maximumFractionDigits: 1 });
+            return (
+              <div key={index} className="flex flex-col border-b border-slate-800/40 pb-0.5 last:border-0 last:pb-0">
+                <span className="text-[9px] text-slate-400 truncate block max-w-[140px]" title={item.name}>
+                  {item.name}
+                </span>
+                <span className="font-mono font-bold text-slate-200">
+                  {formattedVal} <span className="font-normal text-[8px] text-slate-500">Tons</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function EmissionsDashboard() {
   const [allFacilities, setAllFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,6 +160,7 @@ export default function EmissionsDashboard() {
   const [emissions, setEmissions] = useState<EmissionRecord[]>([]);
   const [emissionsYear, setEmissionsYear] = useState<number | null>(null);
   const [emissionsLoading, setEmissionsLoading] = useState(false);
+  const [historicalEmissions, setHistoricalEmissions] = useState<Record<string, EmissionRecord[]>>({});
   const [toxics, setToxics] = useState<HapRecord[]>([]);
   const [toxicsYear, setToxicsYear] = useState<number | string | null>(null);
   const [availableToxicsYears, setAvailableToxicsYears] = useState<string[]>([]);
@@ -187,6 +215,7 @@ export default function EmissionsDashboard() {
     setStacks([]);
     setEmissions([]);
     setManualEmissions([]);
+    setHistoricalEmissions({});
     setToxics([]);
     setAvailableToxicsYears([]);
     setHistoricalHaps({});
@@ -294,6 +323,7 @@ export default function EmissionsDashboard() {
       const data = await fetchEmissions(f.id, f.camdId ?? undefined);
       setEmissions(data.emissions);
       setEmissionsYear(data.year);
+      setHistoricalEmissions(data.historicalEmissions || {});
       setIsSimulated(data.isSimulated);
       setEmissionsLoading(false);
 
@@ -1382,6 +1412,60 @@ export default function EmissionsDashboard() {
                                         <p className="text-xs font-bold text-amber-700">{e.amount.toLocaleString()} <span className="font-normal text-[9px] text-slate-400">TPY</span></p>
                                       </div>
                                     ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Historical CAMD Trend Chart */}
+                              {selectedFacility?.camdId && Object.keys(historicalEmissions).length > 1 && (
+                                <div className="mt-4 pt-4 border-t border-slate-100">
+                                  <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Historical CEMS Trend (CAMD)</h3>
+                                  <div className="h-56 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      {(() => {
+                                        const years = Object.keys(historicalEmissions).sort((a, b) => parseInt(a) - parseInt(b));
+                                        const chartData = years.map(y => {
+                                          const so2Match = historicalEmissions[y].find(e => normalizePsdPollutant(e.pollutant) === 'SO2');
+                                          const noxMatch = historicalEmissions[y].find(e => normalizePsdPollutant(e.pollutant) === 'NOx');
+                                          return {
+                                            year: y,
+                                            'SO2': so2Match ? so2Match.amount : 0,
+                                            'NOx': noxMatch ? noxMatch.amount : 0,
+                                          };
+                                        });
+
+                                        return (
+                                          <LineChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                            <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                                            <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} unit=" T" />
+                                            <Tooltip
+                                              content={<CamdTooltip />}
+                                              position={{ x: -175, y: 15 }}
+                                            />
+                                            <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
+                                            <Line
+                                              type="monotone"
+                                              dataKey="SO2"
+                                              name="SO2 (Tons)"
+                                              stroke="#3b82f6"
+                                              strokeWidth={2}
+                                              dot={{ r: 3, strokeWidth: 1 }}
+                                              activeDot={{ r: 5, strokeWidth: 0 }}
+                                            />
+                                            <Line
+                                              type="monotone"
+                                              dataKey="NOx"
+                                              name="NOx (Tons)"
+                                              stroke="#f59e0b"
+                                              strokeWidth={2}
+                                              dot={{ r: 3, strokeWidth: 1 }}
+                                              activeDot={{ r: 5, strokeWidth: 0 }}
+                                            />
+                                          </LineChart>
+                                        );
+                                      })()}
+                                    </ResponsiveContainer>
                                   </div>
                                 </div>
                               )}

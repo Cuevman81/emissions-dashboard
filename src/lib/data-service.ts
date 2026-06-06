@@ -136,7 +136,13 @@ export async function fetchMSFacilities(): Promise<Facility[]> {
 export async function fetchEmissions(
   registryId: string,
   camdId?: string
-): Promise<{ emissions: EmissionRecord[]; year: number | null; isSimulated: boolean; source?: string | null }> {
+): Promise<{ 
+  emissions: EmissionRecord[]; 
+  year: number | null; 
+  isSimulated: boolean; 
+  source?: string | null;
+  historicalEmissions?: Record<string, EmissionRecord[]>;
+}> {
   try {
     const params = new URLSearchParams({ registryId });
     if (camdId) params.set('camdId', camdId);

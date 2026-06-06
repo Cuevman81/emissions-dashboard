@@ -484,6 +484,24 @@ export default function EmissionsDashboard() {
       unit: 'Tons/Year',
       emissionsType: 'actual' as const,
     }));
+  } else if (selectedFacility?.camdId && neiData?.found && neiData.emissions.length > 0) {
+    // For EGUs (power plants), merge NEI pollutants not reported by CAMD (like PM, VOC, CO, Lead)
+    const existingPollutants = new Set(
+      actualEmissions
+        .map(e => normalizePsdPollutant(e.pollutant))
+        .filter(Boolean) as string[]
+    );
+    neiData.emissions.forEach(ne => {
+      const normNe = normalizePsdPollutant(ne.pollutant);
+      if (normNe && !existingPollutants.has(normNe)) {
+        actualEmissions.push({
+          pollutant: ne.pollutant,
+          amount: ne.amount,
+          unit: 'Tons/Year',
+          emissionsType: 'actual' as const,
+        });
+      }
+    });
   }
 
   const hasEmissionsData = actualEmissions.length > 0 || pteEmissions.length > 0;
@@ -1327,6 +1345,16 @@ export default function EmissionsDashboard() {
                             </div>
                           ) : hasEmissionsData ? (
                             <div className="mb-6 space-y-4">
+                              {selectedFacility?.camdId && (
+                                <div className="bg-blue-50/60 border border-blue-100 rounded-lg p-2.5 text-[10px] text-blue-700 leading-relaxed flex gap-2">
+                                  <Database className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                                  <div>
+                                    <span className="font-bold">Data Source Note:</span> For electricity generating units (EGUs), 
+                                    SO₂ and NOₓ values are fetched live from <span className="font-semibold">EPA CAMD ({emissionsYear || '2023-2025'})</span>. 
+                                    PM, VOC, CO, and Lead values are populated from the <span className="font-semibold">2020 NEI</span>.
+                                  </div>
+                                </div>
+                              )}
                               {actualEmissions.length > 0 && (
                                 <div>
                                   <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mb-1.5">

@@ -150,6 +150,7 @@ const CamdTooltip = ({ active, payload, label }: any) => {
 
 export default function EmissionsDashboard() {
   const [allFacilities, setAllFacilities] = useState<Facility[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedState, setSelectedState] = useState('MS');
   const [center, setCenter] = useState<[number, number] | null>(null);
@@ -200,6 +201,7 @@ export default function EmissionsDashboard() {
 
   // Trigger automatic check/sync for new TRI datasets in the background on app load
   useEffect(() => {
+    setIsMounted(true);
     fetch('/api/sync-tri')
       .then(res => res.json())
       .then(data => console.log('[Sync TRI] Initial check completed:', data))
@@ -334,6 +336,8 @@ export default function EmissionsDashboard() {
       setStacksLoading(true);
       const stackParams = new URLSearchParams({ registryId: f.id });
       if (f.camdId) stackParams.set('camdId', f.camdId);
+      if (f.naics) stackParams.set('naics', f.naics);
+      if (f.sector) stackParams.set('sector', f.sector);
       const stackRes = await fetch(`/api/stacks?${stackParams}`);
       const stackData: StackParameter[] = stackRes.ok ? await stackRes.json() : [];
       setStacks(stackData);
@@ -1189,68 +1193,72 @@ export default function EmissionsDashboard() {
                               <div className="mt-4 pt-4 border-t border-slate-100">
                                 <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Historical Release Trend</h3>
                                 <div className="h-56 w-full">
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    {(() => {
-                                      // 1. Calculate total historical volume per pollutant to find the Top 5
-                                      const pollutantTotals: Record<string, number> = {};
-                                      Object.values(historicalHaps).forEach(arr => {
-                                        arr.forEach(h => {
-                                          pollutantTotals[h.pollutant] = (pollutantTotals[h.pollutant] || 0) + h.amount;
+                                  {isMounted ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      {(() => {
+                                        // 1. Calculate total historical volume per pollutant to find the Top 5
+                                        const pollutantTotals: Record<string, number> = {};
+                                        Object.values(historicalHaps).forEach(arr => {
+                                          arr.forEach(h => {
+                                            pollutantTotals[h.pollutant] = (pollutantTotals[h.pollutant] || 0) + h.amount;
+                                          });
                                         });
-                                      });
-                                      const sortedPollutants = Object.keys(pollutantTotals).sort((a, b) => pollutantTotals[b] - pollutantTotals[a]);
-                                      const topPollutants = sortedPollutants.slice(0, 5);
-                                      const hasOthers = sortedPollutants.length > 5;
+                                        const sortedPollutants = Object.keys(pollutantTotals).sort((a, b) => pollutantTotals[b] - pollutantTotals[a]);
+                                        const topPollutants = sortedPollutants.slice(0, 5);
+                                        const hasOthers = sortedPollutants.length > 5;
 
-                                      // 2. Build the chart data grouped by Top 5 + "Other HAPs"
-                                      const years = Object.keys(historicalHaps).sort((a, b) => parseInt(a) - parseInt(b));
-                                      const chartData = years.map(y => {
-                                        const point: any = { year: y };
-                                        let otherSum = 0;
-                                        historicalHaps[y].forEach(h => {
-                                          if (topPollutants.includes(h.pollutant)) {
-                                            point[h.pollutant] = h.amount;
-                                          } else {
-                                            otherSum += h.amount;
+                                        // 2. Build the chart data grouped by Top 5 + "Other HAPs"
+                                        const years = Object.keys(historicalHaps).sort((a, b) => parseInt(a) - parseInt(b));
+                                        const chartData = years.map(y => {
+                                          const point: any = { year: y };
+                                          let otherSum = 0;
+                                          historicalHaps[y].forEach(h => {
+                                            if (topPollutants.includes(h.pollutant)) {
+                                              point[h.pollutant] = h.amount;
+                                            } else {
+                                              otherSum += h.amount;
+                                            }
+                                          });
+                                          if (hasOthers) {
+                                            point['Other HAPs (Combined)'] = otherSum;
                                           }
+                                          return point;
                                         });
-                                        if (hasOthers) {
-                                          point['Other HAPs (Combined)'] = otherSum;
-                                        }
-                                        return point;
-                                      });
 
-                                      const linesToRender = [...topPollutants];
-                                      if (hasOthers) linesToRender.push('Other HAPs (Combined)');
+                                        const linesToRender = [...topPollutants];
+                                        if (hasOthers) linesToRender.push('Other HAPs (Combined)');
 
-                                      const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#94a3b8']; // slate-400 for 'Others'
+                                        const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#94a3b8']; // slate-400 for 'Others'
 
-                                      return (
-                                        <LineChart data={chartData}>
-                                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                                          <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-                                          <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(val) => val < 1 && val > 0 ? '<1' : val} />
-                                          <Tooltip
-                                            content={<CustomTooltip />}
-                                            position={{ x: -175, y: 15 }}
-                                          />
-                                          <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
-                                          {linesToRender.map((pollutant, idx) => (
-                                            <Line
-                                              key={pollutant}
-                                              type="monotone"
-                                              dataKey={pollutant}
-                                              stroke={pollutant === 'Other HAPs (Combined)' ? '#94a3b8' : colors[idx % (colors.length - 1)]}
-                                              strokeWidth={pollutant === 'Other HAPs (Combined)' ? 1.5 : 2}
-                                              strokeDasharray={pollutant === 'Other HAPs (Combined)' ? '4 4' : undefined}
-                                              dot={{ r: 3, strokeWidth: 1 }}
-                                              activeDot={{ r: 5, strokeWidth: 0 }}
+                                        return (
+                                          <LineChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                            <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                                            <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(val) => val < 1 && val > 0 ? '<1' : val} />
+                                            <Tooltip
+                                              content={<CustomTooltip />}
+                                              position={{ x: -175, y: 15 }}
                                             />
-                                          ))}
-                                        </LineChart>
-                                      );
-                                    })()}
-                                  </ResponsiveContainer>
+                                            <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
+                                            {linesToRender.map((pollutant, idx) => (
+                                              <Line
+                                                key={pollutant}
+                                                type="monotone"
+                                                dataKey={pollutant}
+                                                stroke={pollutant === 'Other HAPs (Combined)' ? '#94a3b8' : colors[idx % (colors.length - 1)]}
+                                                strokeWidth={pollutant === 'Other HAPs (Combined)' ? 1.5 : 2}
+                                                strokeDasharray={pollutant === 'Other HAPs (Combined)' ? '4 4' : undefined}
+                                                dot={{ r: 3, strokeWidth: 1 }}
+                                                activeDot={{ r: 5, strokeWidth: 0 }}
+                                              />
+                                            ))}
+                                          </LineChart>
+                                        );
+                                      })()}
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <div className="h-full w-full bg-slate-50/50 animate-pulse rounded-lg flex items-center justify-center text-[10px] text-slate-400">Loading chart...</div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1421,51 +1429,55 @@ export default function EmissionsDashboard() {
                                 <div className="mt-4 pt-4 border-t border-slate-100">
                                   <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Historical CEMS Trend (CAMD)</h3>
                                   <div className="h-56 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      {(() => {
-                                        const years = Object.keys(historicalEmissions).sort((a, b) => parseInt(a) - parseInt(b));
-                                        const chartData = years.map(y => {
-                                          const so2Match = historicalEmissions[y].find(e => normalizePsdPollutant(e.pollutant) === 'SO2');
-                                          const noxMatch = historicalEmissions[y].find(e => normalizePsdPollutant(e.pollutant) === 'NOx');
-                                          return {
-                                            year: y,
-                                            'SO2': so2Match ? so2Match.amount : 0,
-                                            'NOx': noxMatch ? noxMatch.amount : 0,
-                                          };
-                                        });
+                                    {isMounted ? (
+                                      <ResponsiveContainer width="100%" height="100%">
+                                        {(() => {
+                                          const years = Object.keys(historicalEmissions).sort((a, b) => parseInt(a) - parseInt(b));
+                                          const chartData = years.map(y => {
+                                            const so2Match = historicalEmissions[y].find(e => normalizePsdPollutant(e.pollutant) === 'SO2');
+                                            const noxMatch = historicalEmissions[y].find(e => normalizePsdPollutant(e.pollutant) === 'NOx');
+                                            return {
+                                              year: y,
+                                              'SO2': so2Match ? so2Match.amount : 0,
+                                              'NOx': noxMatch ? noxMatch.amount : 0,
+                                            };
+                                          });
 
-                                        return (
-                                          <LineChart data={chartData}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                                            <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-                                            <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} unit=" T" />
-                                            <Tooltip
-                                              content={<CamdTooltip />}
-                                              position={{ x: -175, y: 15 }}
-                                            />
-                                            <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
-                                            <Line
-                                              type="monotone"
-                                              dataKey="SO2"
-                                              name="SO2 (Tons)"
-                                              stroke="#3b82f6"
-                                              strokeWidth={2}
-                                              dot={{ r: 3, strokeWidth: 1, stroke: '#3b82f6', fill: '#fff' }}
-                                              activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }}
-                                            />
-                                            <Line
-                                              type="monotone"
-                                              dataKey="NOx"
-                                              name="NOx (Tons)"
-                                              stroke="#f59e0b"
-                                              strokeWidth={2}
-                                              dot={{ r: 3, strokeWidth: 1, stroke: '#f59e0b', fill: '#fff' }}
-                                              activeDot={{ r: 5, strokeWidth: 0, fill: '#f59e0b' }}
-                                            />
-                                          </LineChart>
-                                        );
-                                      })()}
-                                    </ResponsiveContainer>
+                                          return (
+                                            <LineChart data={chartData}>
+                                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                              <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                                              <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} unit=" T" />
+                                              <Tooltip
+                                                content={<CamdTooltip />}
+                                                position={{ x: -175, y: 15 }}
+                                              />
+                                              <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
+                                              <Line
+                                                type="monotone"
+                                                dataKey="SO2"
+                                                name="SO2 (Tons)"
+                                                stroke="#3b82f6"
+                                                strokeWidth={2}
+                                                dot={{ r: 3, strokeWidth: 1, stroke: '#3b82f6', fill: '#fff' }}
+                                                activeDot={{ r: 5, strokeWidth: 0, fill: '#3b82f6' }}
+                                              />
+                                              <Line
+                                                type="monotone"
+                                                dataKey="NOx"
+                                                name="NOx (Tons)"
+                                                stroke="#f59e0b"
+                                                strokeWidth={2}
+                                                dot={{ r: 3, strokeWidth: 1, stroke: '#f59e0b', fill: '#fff' }}
+                                                activeDot={{ r: 5, strokeWidth: 0, fill: '#f59e0b' }}
+                                              />
+                                            </LineChart>
+                                          );
+                                        })()}
+                                      </ResponsiveContainer>
+                                    ) : (
+                                      <div className="h-full w-full bg-slate-50/50 animate-pulse rounded-lg flex items-center justify-center text-[10px] text-slate-400">Loading chart...</div>
+                                    )}
                                   </div>
                                 </div>
                               )}

@@ -74,10 +74,96 @@ async function fetchCamdStackParameters(orisCode: string) {
   }
 }
 
+function getFallbackIndustryStacks(naics: string | null, sector: string | null): any[] {
+  const n3 = naics ? naics.substring(0, 3) : '';
+  const n4 = naics ? naics.substring(0, 4) : '';
+  
+  let height = 45;      // ft
+  let diameter = 2.5;    // ft
+  let temp = 150;       // °F
+  let velocity = 30;    // fps
+  let sectorName = sector || 'General Industrial';
+  
+  if (sector === 'Power Plant' || n3 === '221') {
+    height = 250;
+    diameter = 12.0;
+    temp = 280;
+    velocity = 55;
+    sectorName = 'Power Generation EGU';
+  } else if (sector === 'Refinery' || n3 === '324') {
+    height = 120;
+    diameter = 5.0;
+    temp = 350;
+    velocity = 45;
+    sectorName = 'Petroleum Refinery';
+  } else if (sector === 'Chemical' || n3 === '325') {
+    height = 75;
+    diameter = 3.0;
+    temp = 200;
+    velocity = 35;
+    sectorName = 'Chemical Manufacturing';
+  } else if (sector === 'Cement' || n4 === '3273') {
+    height = 110;
+    diameter = 6.0;
+    temp = 300;
+    velocity = 40;
+    sectorName = 'Cement/Concrete';
+  } else if (sector === 'Paper/Pulp' || n3 === '322') {
+    height = 140;
+    diameter = 7.0;
+    temp = 280;
+    velocity = 45;
+    sectorName = 'Pulp & Paper Mill';
+  } else if (sector === 'Steel' || n3 === '331') {
+    height = 95;
+    diameter = 4.5;
+    temp = 350;
+    velocity = 40;
+    sectorName = 'Primary Metals / Steel';
+  } else if (n3 === '321') { // Wood Products
+    height = 60;
+    diameter = 3.0;
+    temp = 200;
+    velocity = 35;
+    sectorName = 'Wood Products Manufacturing';
+  } else if (n3 === '486') { // Pipelines / Compressor Stations
+    height = 35;
+    diameter = 2.0;
+    temp = 700; // hot exhaust
+    velocity = 85;
+    sectorName = 'Pipeline Compressor Station';
+  } else if (n3 === '311' || n3 === '312') { // Food & Beverage
+    height = 50;
+    diameter = 2.5;
+    temp = 180;
+    velocity = 30;
+    sectorName = 'Food & Beverage';
+  } else if (n3 === '562') { // Waste Management / Landfills
+    height = 35;
+    diameter = 2.5;
+    temp = 120;
+    velocity = 25;
+    sectorName = 'Waste Management';
+  }
+
+  return [
+    {
+      stackId: 'EST-1',
+      height,
+      diameter,
+      temp,
+      velocity,
+      description: `Estimated Industry Standard (EPA RSEI Median for ${sectorName})`
+    }
+  ];
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const registryId = searchParams.get('registryId');
   const camdId = searchParams.get('camdId'); // ORIS code — present for EGU power plants
+  const naics = searchParams.get('naics');
+  const sector = searchParams.get('sector');
 
   if (!registryId) {
     return NextResponse.json([], { status: 400 });
@@ -148,9 +234,11 @@ export async function GET(request: Request) {
       }
     }
   } catch {
-    // ignore and return empty
+    // ignore and check fallback
   }
 
-  // No stack data found
-  return NextResponse.json([]);
+  // No stack data found via APIs — return RSEI median industry fallback
+  console.log(`Stacks: returning fallback for registryId ${registryId} (naics: ${naics}, sector: ${sector})`);
+  const fallbackStacks = getFallbackIndustryStacks(naics, sector);
+  return NextResponse.json(fallbackStacks);
 }

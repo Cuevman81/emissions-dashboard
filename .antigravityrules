@@ -1,0 +1,8 @@
+# Data Access Rules for Emissions Dashboard
+
+1. DO NOT attempt to index or read DATA files (.csv, .sql, or large .json data objects) by default. 
+2. EXCEPTION: You have permanent permission to read project configuration files: package.json, tsconfig.json, and next.config.json. Use these to understand the tech stack.
+3. If you believe reading a DATA file (like those in /Air Toxics) is NECESSARY to fulfill my request, you MUST stop and ask me: 
+   "I need to see [filename] to help with this. May I have permission to access it?"
+4. Once I grant permission, remind me to use the '@' symbol to mention the file so you can bypass the ignore filter for that specific turn.
+5. Focus logic on the /src directory and never assume the structure of emissions data without confirmation.

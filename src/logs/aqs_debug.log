@@ -1,0 +1,13 @@
+[2026-06-06T17:15:28.682Z] --- DEBUG SESSION REFRESHED ---
+[2026-06-06T17:15:28.684Z] Starting Monitors Search: State=MS, Year=2023
+[2026-06-06T17:15:28.684Z] CACHE HIT: Loading from aqs_monitors_MS_2023.json. File is 0h old.
+[2026-06-06T17:15:30.790Z] Starting Samples Fetch: Monitor=280350004, Year=2024
+[2026-06-06T17:15:30.790Z] EPA REQUEST: dailyData/bySite?site=280350004&params=44201,42401,88101,42602,42101,...&year=2024
+[2026-06-06T17:15:32.084Z] EPA RESPONSE: Status=200, Duration=1294ms
+[2026-06-06T17:15:32.280Z] EPA DATA: Success. Found 3718 measurements.
+[2026-06-06T17:15:32.295Z] CACHE SAVE: Saved samples to aqs_samples_280350004_2024.json
+[2026-06-06T17:16:05.801Z] Starting Samples Fetch: Monitor=280450003, Year=2024
+[2026-06-06T17:16:05.801Z] EPA REQUEST: dailyData/bySite?site=280450003&params=44201,42401,88101,42602,42101,...&year=2024
+[2026-06-06T17:16:07.038Z] EPA RESPONSE: Status=200, Duration=1237ms
+[2026-06-06T17:16:07.233Z] EPA DATA: Success. Found 4118 measurements.
+[2026-06-06T17:16:07.245Z] CACHE SAVE: Saved samples to aqs_samples_280450003_2024.json

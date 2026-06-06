@@ -1,0 +1,29 @@
+# 1. Block massive directories
+node_modules/
+.next/
+dist/
+build/
+
+# 2. Block OS, Lock, & Build Metadata (useless to AI)
+.DS_Store
+package-lock.json
+*.tsbuildinfo
+*.log
+
+# 3. Block Security & Secrets
+.env
+*.pem
+config/secrets.json
+
+# 4. Block Data (The Token Eaters)
+*.csv
+*.sql
+# This blocks all JSON files...
+*.json
+# ...BUT these "!" lines allow the AI to see your important configs:
+!package.json
+!tsconfig.json
+!next.config.json
+
+# 5. Project Specific (Air Toxics Data)
+Air Toxics/

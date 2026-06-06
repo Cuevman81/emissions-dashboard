@@ -22,11 +22,12 @@ async function fetchCamdEmissions(orisCode: string): Promise<{ pollutant: string
       });
       if (!res.ok) continue;
       const data = await res.json();
-      if (!Array.isArray(data) || data.length === 0) continue;
+      const records = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : null);
+      if (!records || records.length === 0) continue;
 
       // Aggregate across all units at the plant
       const totals: Record<string, number> = {};
-      for (const record of data) {
+      for (const record of records) {
         if (record.so2Mass && Number(record.so2Mass) > 0) totals['SO2'] = (totals['SO2'] || 0) + Number(record.so2Mass);
         if (record.noxMass && Number(record.noxMass) > 0) totals['NOX'] = (totals['NOX'] || 0) + Number(record.noxMass);
         if (record.co2Mass && Number(record.co2Mass) > 0) totals['CO2'] = (totals['CO2'] || 0) + Number(record.co2Mass);

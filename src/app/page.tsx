@@ -121,11 +121,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const getTooltipPosition = (point: any) => ({
-  x: -175,
-  y: Math.max(10, Math.min(80, point.y - 75))
-});
-
 export default function EmissionsDashboard() {
   const [allFacilities, setAllFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1189,7 +1184,7 @@ export default function EmissionsDashboard() {
                                           <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(val) => val < 1 && val > 0 ? '<1' : val} />
                                           <Tooltip
                                             content={<CustomTooltip />}
-                                            position={getTooltipPosition as any}
+                                            position={{ x: -175, y: 15 }}
                                           />
                                           <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
                                           {linesToRender.map((pollutant, idx) => (

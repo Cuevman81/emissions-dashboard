@@ -103,7 +103,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                 <span className="text-[9px] text-slate-400 truncate block max-w-[140px]" title={item.name}>
                   {item.name}
                 </span>
-                <span className="font-mono font-bold text-slate-200">
+                <span className="font-mono font-bold" style={{ color: item.color || '#e2e8f0' }}>
                   {formattedVal} <span className="font-normal text-[8px] text-slate-500">Tons/Yr</span>
                 </span>
               </div>
@@ -135,7 +135,7 @@ const CamdTooltip = ({ active, payload, label }: any) => {
                 <span className="text-[9px] text-slate-400 truncate block max-w-[140px]" title={item.name}>
                   {item.name}
                 </span>
-                <span className="font-mono font-bold text-slate-200">
+                <span className="font-mono font-bold" style={{ color: item.color || '#e2e8f0' }}>
                   {formattedVal} <span className="font-normal text-[8px] text-slate-500">Tons</span>
                 </span>
               </div>

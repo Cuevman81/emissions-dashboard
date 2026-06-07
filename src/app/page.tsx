@@ -175,6 +175,34 @@ export default function EmissionsDashboard() {
     if (activeTab === 'inventory') setActiveTab('psd');
   };
 
+  const handleFacilityClose = (closedFacility: Facility) => {
+    setTimeout(() => {
+      setSelectedFacility(current => {
+        if (current && current.id === closedFacility.id) {
+          return null;
+        }
+        return current;
+      });
+    }, 50);
+  };
+
+  const handleMonitorClose = (closedMonitor: AqsMonitor) => {
+    setTimeout(() => {
+      setSelectedMonitor(current => {
+        if (current && current.id === closedMonitor.id) {
+          return null;
+        }
+        return current;
+      });
+    }, 50);
+  };
+
+  useEffect(() => {
+    if (!selectedFacility && !selectedMonitor && (activeTab === 'psd' || activeTab === 'toxics')) {
+      setActiveTab('inventory');
+    }
+  }, [selectedFacility, selectedMonitor, activeTab]);
+
   const handleExport = async () => {
     if (proximityFacilities.length === 0) return;
     const eisIds = proximityFacilities.map(f => f.eisId).filter(Boolean) as string[];
@@ -456,7 +484,9 @@ export default function EmissionsDashboard() {
                   aqsMonitors={showAqsMonitors ? aqsMonitors : []}
                   onMapClick={(lat, lon) => setCenter([lat, lon])}
                   onFacilityClick={handleFacilityClick}
+                  onFacilityClose={handleFacilityClose}
                   onMonitorClick={handleMonitorClick}
+                  onMonitorClose={handleMonitorClose}
                   classIGeoJson={showClassI ? classIGeoJson : null}
                 />
               </CardContent>
@@ -708,6 +738,9 @@ export default function EmissionsDashboard() {
                           isMounted={isMounted}
                         />
                       )}
+                      <button onClick={() => setSelectedFacility(null)} className="w-full py-2 mt-4 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                        Close Details
+                      </button>
                     </div>
                   ) : (
                     <div className="text-center py-20">

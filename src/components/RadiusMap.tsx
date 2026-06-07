@@ -79,7 +79,9 @@ interface RadiusMapProps {
   aqsMonitors?: AqsMonitor[];
   onMapClick: (lat: number, lon: number) => void;
   onFacilityClick: (facility: Facility) => void;
+  onFacilityClose?: (facility: Facility) => void;
   onMonitorClick?: (monitor: AqsMonitor) => void;
+  onMonitorClose?: (monitor: AqsMonitor) => void;
   classIGeoJson?: FeatureCollection | null;
 }
 
@@ -92,7 +94,19 @@ function MapEvents({ onClick }: { onClick: (lat: number, lon: number) => void })
   return null;
 }
 
-export default function RadiusMap({ defaultCenter, center, radiusMi, facilities, aqsMonitors = [], onMapClick, onFacilityClick, onMonitorClick, classIGeoJson }: RadiusMapProps) {
+export default function RadiusMap({
+  defaultCenter,
+  center,
+  radiusMi,
+  facilities,
+  aqsMonitors = [],
+  onMapClick,
+  onFacilityClick,
+  onFacilityClose,
+  onMonitorClick,
+  onMonitorClose,
+  classIGeoJson
+}: RadiusMapProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -164,7 +178,7 @@ export default function RadiusMap({ defaultCenter, center, radiusMi, facilities,
           icon={makeMarkerIcon(f)}
           eventHandlers={{ click: () => onFacilityClick(f) }}
         >
-          <Popup>
+          <Popup eventHandlers={{ remove: () => onFacilityClose?.(f) }}>
             <div className="text-sm leading-snug">
               <p className="font-bold">{f.name}</p>
               <p className="text-slate-500">{f.city}, {f.state}</p>
@@ -202,7 +216,7 @@ export default function RadiusMap({ defaultCenter, center, radiusMi, facilities,
             }
           }}
         >
-          <Popup>
+          <Popup eventHandlers={{ remove: () => onMonitorClose?.(m) }}>
             <div className="text-sm leading-snug">
               <p className="font-bold text-indigo-700">📡 Monitoring Site</p>
               <p className="font-semibold text-xs mt-1">{m.local_site_name || 'AQS Monitor'}</p>

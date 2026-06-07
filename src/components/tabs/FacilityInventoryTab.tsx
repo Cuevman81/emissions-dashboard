@@ -10,6 +10,7 @@ interface FacilityInventoryTabProps {
   isMounted: boolean;
   selectedSector: string | null;
   onSectorSelect: (sector: string | null) => void;
+  neiYear: '2020' | '2023';
 }
 
 // Static metadata for data sources — latestYear is computed dynamically below
@@ -27,6 +28,7 @@ export default function FacilityInventoryTab({
   isMounted,
   selectedSector,
   onSectorSelect,
+  neiYear,
 }: FacilityInventoryTabProps) {
   const [naaqsLoading, setNaaqsLoading] = useState(true);
   const [designValues, setDesignValues] = useState<NaaqsDesignValue[]>([]);
@@ -45,8 +47,8 @@ export default function FacilityInventoryTab({
     // AQS / ArcGIS: EPA publishes certified DVs; latest available is typically current year - 1
     const latestAqs = String(currentYear - 1);
 
-    // NEI: triennial — last published is 2020, next will be 2023
-    const latestNei = '2020';
+    // NEI: triennial — last published is 2023
+    const latestNei = '2023';
 
     const yearMap: Record<string, string> = {
       echo: 'Live',
@@ -78,7 +80,7 @@ export default function FacilityInventoryTab({
     const syntheticMinor = allFacilities.filter(f => f.permitType === 'Synthetic Minor').length;
     const minor = allFacilities.filter(f => f.permitType === 'Federally Reportable Minor' || f.permitType === 'Other').length;
     const triReporters = allFacilities.filter(f => f.triId).length;
-    const neiReporters = allFacilities.filter(f => f.eisId).length;
+    const neiReporters = allFacilities.filter(f => neiYear === '2023' ? f.hasNei2023 : f.eisId).length;
     const camdUnits = allFacilities.filter(f => f.camdId).length;
     const hpvCount = allFacilities.filter(f => f.hasHpv).length;
 
@@ -91,15 +93,15 @@ export default function FacilityInventoryTab({
 
     // Coverage gaps
     const noTri = allFacilities.filter(f => f.isMajor && !f.triId).length;
-    const noNei = allFacilities.filter(f => f.isMajor && !f.eisId).length;
-    const bothIds = allFacilities.filter(f => f.triId && f.eisId).length;
+    const noNei = allFacilities.filter(f => f.isMajor && !(neiYear === '2023' ? f.hasNei2023 : f.eisId)).length;
+    const bothIds = allFacilities.filter(f => f.triId && (neiYear === '2023' ? f.hasNei2023 : f.eisId)).length;
 
     return {
       total, major, syntheticMinor, minor,
       triReporters, neiReporters, camdUnits, hpvCount,
       sectors, noTri, noNei, bothIds,
     };
-  }, [allFacilities]);
+  }, [allFacilities, neiYear]);
 
   // ── NAAQS Attainment Snapshot ───────────────────────────────
   const attainmentSnapshot = useMemo(() => {
@@ -212,7 +214,7 @@ export default function FacilityInventoryTab({
 
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-500 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-violet-500" /> NEI Coverage
+              <span className="w-2 h-2 rounded-full bg-violet-500" /> NEI {neiYear} Coverage
             </span>
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-700">{stats.neiReporters}</span>
@@ -361,13 +363,13 @@ export default function FacilityInventoryTab({
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500">Major sources with NEI data</span>
+            <span className="text-[10px] text-slate-500">Major sources with NEI {neiYear} data</span>
             <span className={`text-[10px] font-bold ${stats.noNei === 0 ? 'text-green-600' : 'text-amber-600'}`}>
               {stats.major - stats.noNei} / {stats.major}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-slate-500">Sources with both TRI + NEI</span>
+            <span className="text-[10px] text-slate-500">Sources with both TRI + NEI {neiYear}</span>
             <span className="text-[10px] font-bold text-slate-600">{stats.bothIds}</span>
           </div>
 
@@ -382,7 +384,7 @@ export default function FacilityInventoryTab({
               {stats.noNei > 0 && (
                 <p className="text-[9px] text-amber-600 flex items-center gap-1">
                   <AlertTriangle className="h-2.5 w-2.5 flex-shrink-0" />
-                  {stats.noNei} major source{stats.noNei > 1 ? 's' : ''} missing NEI ID — no emissions inventory
+                  {stats.noNei} major source{stats.noNei > 1 ? 's' : ''} missing NEI {neiYear} data — no emissions inventory
                 </p>
               )}
             </div>

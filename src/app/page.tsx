@@ -44,10 +44,16 @@ export default function EmissionsDashboard() {
   const [dataSource, setDataSource] = useState<string>('');
 
   // NEI shared state
+  const [neiYear, setNeiYear] = useState<'2020' | '2023'>('2023');
   const [neiData, setNeiData] = useState<NeiFacilityData | null>(null);
   const [neiLoading, setNeiLoading] = useState(false);
   const [countyData, setCountyData] = useState<NeiCountyData | null>(null);
   const [countyLoading, setCountyLoading] = useState(false);
+
+  // NEI Auto-Sync State
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const [updateInfo, setUpdateInfo] = useState<{ updateAvailable: boolean; lastModified: string; databaseExists: boolean } | null>(null);
 
   // Federal Class I Area overlay
   const [classIGeoJson, setClassIGeoJson] = useState<FeatureCollection | null>(null);
@@ -68,7 +74,51 @@ export default function EmissionsDashboard() {
       .then(res => res.json())
       .then(data => console.log('[Sync TRI] Initial check completed:', data))
       .catch(err => console.error('[Sync TRI] Failed to trigger sync check:', err));
+
+    fetch('/api/sync-nei?checkOnly=true')
+      .then(res => res.json())
+      .then(data => {
+        console.log('[Sync NEI] Status check:', data);
+        if (data.updateAvailable || !data.databaseExists) {
+          setUpdateInfo(data);
+        }
+      })
+      .catch(err => console.error('[Sync NEI] Update check failed:', err));
   }, []);
+
+  const handleNeiSync = async () => {
+    setSyncLoading(true);
+    setSyncMessage('Downloading and processing 2023 NEI from EPA servers...');
+    try {
+      const res = await fetch('/api/sync-nei', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSyncMessage(`Successfully synchronized ${data.count} Mississippi facilities! Re-fetching database...`);
+        // Recheck update status
+        const checkRes = await fetch('/api/sync-nei?checkOnly=true');
+        const checkData = await checkRes.json();
+        setUpdateInfo(checkData.updateAvailable || !checkData.databaseExists ? checkData : null);
+
+        // Reload facilities list for current state to reflect any new associations
+        setLoading(true);
+        const facRes = await fetch(`/api/facilities?state=${selectedState}`);
+        if (facRes.ok) {
+          const facData = await facRes.json();
+          setAllFacilities(facData);
+        }
+        setLoading(false);
+      } else {
+        setSyncMessage(`Sync failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      setSyncMessage(`Sync failed: ${err.message || String(err)}`);
+    } finally {
+      setTimeout(() => {
+        setSyncLoading(false);
+        setSyncMessage('');
+      }, 5000); // Clear message after 5s
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -313,6 +363,42 @@ export default function EmissionsDashboard() {
       </div>
       <ErrorLogger />
       <div className="max-w-7xl mx-auto space-y-6">
+
+        {/* NEI Update Banner */}
+        {updateInfo && (
+          <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-4 py-3 rounded-2xl shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3 animate-fade-in border border-violet-500/30">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🔔</span>
+              <div>
+                <p className="text-xs font-bold leading-tight">
+                  {!updateInfo.databaseExists 
+                    ? "2023 NEI Local Database is not yet built." 
+                    : "A new update for the 2023 NEI database is available on EPA servers."
+                  }
+                </p>
+                <p className="text-[10px] text-violet-200 mt-0.5 leading-none">
+                  {updateInfo.lastModified ? `EPA Server Last Modified: ${new Date(updateInfo.lastModified).toLocaleString()}` : "Ready to download"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleNeiSync}
+              disabled={syncLoading}
+              className="bg-white text-violet-700 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-violet-50 transition-all shadow-sm flex items-center gap-1.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {syncLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '📥'}
+              {syncLoading ? "Syncing..." : "Sync 2023 Database"}
+            </button>
+          </div>
+        )}
+
+        {/* Sync Progress Notice */}
+        {syncMessage && (
+          <div className="bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-lg flex items-center gap-3 border border-slate-800">
+            <Loader2 className="h-4 w-4 animate-spin text-violet-400 shrink-0" />
+            <span className="text-xs font-medium">{syncMessage}</span>
+          </div>
+        )}
 
         {/* Header */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -577,6 +663,7 @@ export default function EmissionsDashboard() {
                     isMounted={isMounted}
                     selectedSector={selectedSector}
                     onSectorSelect={setSelectedSector}
+                    neiYear={neiYear}
                   />
                 </CardContent>
               </Card>
@@ -729,6 +816,7 @@ export default function EmissionsDashboard() {
                           aqsMonitors={aqsMonitors} showAqsMonitors={showAqsMonitors}
                           handleAqsToggle={handleAqsToggle} aqsError={aqsError} aqsLoading={aqsLoading}
                           filterReported={mapFilter === 'tri'} mapTriYear={mapTriYear}
+                          neiYear={neiYear} setNeiYear={setNeiYear}
                         />
                       ) : (
                         <PsdTab
@@ -736,6 +824,7 @@ export default function EmissionsDashboard() {
                           neiData={neiData} setNeiData={setNeiData}
                           neiLoading={neiLoading} setNeiLoading={setNeiLoading}
                           isMounted={isMounted}
+                          neiYear={neiYear} setNeiYear={setNeiYear}
                         />
                       )}
                       <button onClick={() => setSelectedFacility(null)} className="w-full py-2 mt-4 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">

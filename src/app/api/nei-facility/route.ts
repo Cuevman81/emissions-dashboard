@@ -61,9 +61,39 @@ function fieldNameFallback(name: string): string {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const eisId = searchParams.get('eisId');
+  const year = searchParams.get('year') || '2023';
 
   if (!eisId) {
-    return NextResponse.json({ found: false, emissions: [] }, { status: 400 });
+    return NextResponse.json({ found: false, emissions: [], haps: [] }, { status: 400 });
+  }
+
+  if (year === '2023') {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const localPath = path.join(process.cwd(), 'src', 'lib', 'nei_2023_MS.json');
+      if (fs.existsSync(localPath)) {
+        const localData = JSON.parse(fs.readFileSync(localPath, 'utf8'));
+        const facility = localData[eisId];
+        if (facility) {
+          return NextResponse.json({
+            found: true,
+            facilityName: facility.facilityName,
+            county: facility.county,
+            fips: facility.fips,
+            naics: facility.naics,
+            emissions: facility.emissions,
+            haps: facility.haps,
+            year: 2023,
+            source: facility.source || 'NEI 2023 v1'
+          });
+        }
+      }
+      return NextResponse.json({ found: false, emissions: [], haps: [] });
+    } catch (err: any) {
+      console.error('NEI 2023 local fetch error:', err.message);
+      return NextResponse.json({ found: false, emissions: [], haps: [], error: err.message });
+    }
   }
 
   try {

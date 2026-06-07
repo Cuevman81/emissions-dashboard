@@ -22,9 +22,20 @@ interface PsdTabProps {
   neiLoading: boolean;
   setNeiLoading: (b: boolean) => void;
   isMounted: boolean;
+  neiYear: '2020' | '2023';
+  setNeiYear: (y: '2020' | '2023') => void;
 }
 
-export default function PsdTab({ selectedFacility, neiData, setNeiData, neiLoading, setNeiLoading, isMounted }: PsdTabProps) {
+export default function PsdTab({
+  selectedFacility,
+  neiData,
+  setNeiData,
+  neiLoading,
+  setNeiLoading,
+  isMounted,
+  neiYear,
+  setNeiYear,
+}: PsdTabProps) {
   const [stacks, setStacks] = useState<StackParameter[]>([]);
   const [stacksLoading, setStacksLoading] = useState(false);
   const [emissions, setEmissions] = useState<EmissionRecord[]>([]);
@@ -45,7 +56,7 @@ export default function PsdTab({ selectedFacility, neiData, setNeiData, neiLoadi
 
       if (selectedFacility.eisId) {
         setNeiLoading(true);
-        fetchNeiFacility(selectedFacility.eisId)
+        fetchNeiFacility(selectedFacility.eisId, neiYear)
           .then(result => { if (!cancelled) { setNeiData(result); setNeiLoading(false); } })
           .catch(() => { if (!cancelled) setNeiLoading(false); });
       }
@@ -76,7 +87,7 @@ export default function PsdTab({ selectedFacility, neiData, setNeiData, neiLoadi
 
     load();
     return () => { cancelled = true; };
-  }, [selectedFacility.id]);
+  }, [selectedFacility.id, neiYear]);
 
   const combinedEmissions = [...emissions, ...manualEmissions];
   let actualEmissions = combinedEmissions.filter(e => e.emissionsType === 'actual' || !e.emissionsType);
@@ -325,28 +336,47 @@ export default function PsdTab({ selectedFacility, neiData, setNeiData, neiLoadi
         );
       })()}
 
-      {/* NEI 2020 Reported Emissions */}
-      {(neiLoading || (neiData?.found && neiData.emissions.length > 0)) && (
+      {/* NEI Reported Emissions */}
+      {selectedFacility.eisId && (
         <div className="border-t border-slate-100 pt-5 mt-2">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-              <BarChart3 className="h-3 w-3" /> NEI 2020 Reported
+              <BarChart3 className="h-3 w-3" /> NEI Reported
             </h3>
-            {!neiLoading && (
-              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">2020 NEI</span>
-            )}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <button
+                onClick={() => setNeiYear('2020')}
+                className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
+                  neiYear === '2020'
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                2020
+              </button>
+              <button
+                onClick={() => setNeiYear('2023')}
+                className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
+                  neiYear === '2023'
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                2023
+              </button>
+            </div>
           </div>
           {neiLoading ? (
             <div className="flex items-center gap-2 text-xs text-slate-400 italic py-3">
-              <Loader2 className="h-3 w-3 animate-spin" /> Querying NEI 2020…
+              <Loader2 className="h-3 w-3 animate-spin" /> Querying NEI {neiYear}…
             </div>
           ) : (
             <>
-              {neiData!.emissions.length > 0 && (
+              {neiData?.found && neiData.emissions.length > 0 ? (
                 <>
-                  <p className="text-[9px] text-slate-400 mb-2">Criteria air pollutants (CAPs) — facility-reported, actual emissions.</p>
+                  <p className="text-[9px] text-slate-400 mb-2">Criteria air pollutants (CAPs) — facility-reported, {neiYear} NEI actual emissions.</p>
                   <div className="grid grid-cols-2 gap-1.5 mb-3">
-                    {neiData!.emissions.map((e, i) => (
+                    {neiData.emissions.map((e, i) => (
                       <div key={i} className="bg-emerald-50/70 p-2 rounded border border-emerald-100">
                         <p className="text-[8px] font-bold text-slate-400 uppercase truncate">{e.pollutant}</p>
                         <p className="text-xs font-bold text-emerald-700">{e.amount.toLocaleString()} <span className="font-normal text-[9px] text-slate-400">{e.unit}</span></p>
@@ -354,6 +384,10 @@ export default function PsdTab({ selectedFacility, neiData, setNeiData, neiLoadi
                     ))}
                   </div>
                 </>
+              ) : (
+                <p className="text-[10px] text-slate-400 italic py-3 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                  No NEI {neiYear} emissions data reported for this facility.
+                </p>
               )}
               {neiData?.county && <p className="text-[9px] text-slate-300 mt-2">County: {neiData.county} · FIPS: {neiData.fips}</p>}
             </>

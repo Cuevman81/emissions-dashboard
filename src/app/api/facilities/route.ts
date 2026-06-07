@@ -280,6 +280,27 @@ function mergeLocalTriFacilities(facilities: any[], state: string) {
   }
 }
 
+function attachNei2023Flags(facilities: any[]) {
+  const nei2023Path = path.join(process.cwd(), 'src', 'lib', 'nei_2023_MS.json');
+  if (fs.existsSync(nei2023Path)) {
+    try {
+      const nei2023Data = JSON.parse(fs.readFileSync(nei2023Path, 'utf8'));
+      facilities.forEach((f: any) => {
+        f.hasNei2023 = !!(f.eisId && nei2023Data[f.eisId]);
+      });
+    } catch (err) {
+      console.error('Error reading nei_2023_MS.json:', err);
+      facilities.forEach((f: any) => {
+        f.hasNei2023 = false;
+      });
+    }
+  } else {
+    facilities.forEach((f: any) => {
+      f.hasNei2023 = false;
+    });
+  }
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = (searchParams.get('state') || 'MS').toUpperCase();
@@ -294,7 +315,9 @@ export async function GET(request: Request) {
       if (isFresh) {
         console.log(`[Cache] Loading ${state} facilities from disk...`);
         const cachedData = fs.readFileSync(cachePath, 'utf8');
-        return NextResponse.json(JSON.parse(cachedData));
+        const facilities = JSON.parse(cachedData);
+        attachNei2023Flags(facilities);
+        return NextResponse.json(facilities);
       }
       console.log(`[Cache] Found stale cache for ${state}, attempting refresh...`);
     }
@@ -328,6 +351,9 @@ export async function GET(request: Request) {
       });
     }
 
+    // 4.5. Attach hasNei2023 availability
+    attachNei2023Flags(facilities);
+
     // 5. Save to cache if we got anything useful
     if (success && facilities.length > 0) {
        console.log(`[Cache] Saving ${facilities.length} records to ${state} facility cache.`);
@@ -335,7 +361,9 @@ export async function GET(request: Request) {
     } else if (fs.existsSync(cachePath)) {
        console.warn(`[Cache] Falling back to stale cache due to EPA failure.`);
        const staleData = fs.readFileSync(cachePath, 'utf8');
-       return NextResponse.json(JSON.parse(staleData));
+       const facilities = JSON.parse(staleData);
+       attachNei2023Flags(facilities);
+       return NextResponse.json(facilities);
     }
 
     return NextResponse.json(facilities);
@@ -344,7 +372,9 @@ export async function GET(request: Request) {
     // Ultimate fallback: return empty or check if cache exists regardless of age
     if (fs.existsSync(cachePath)) {
        const staleData = fs.readFileSync(cachePath, 'utf8');
-       return NextResponse.json(JSON.parse(staleData));
+       const facilities = JSON.parse(staleData);
+       attachNei2023Flags(facilities);
+       return NextResponse.json(facilities);
     }
     return NextResponse.json([]);
   }

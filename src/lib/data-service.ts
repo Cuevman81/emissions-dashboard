@@ -54,6 +54,7 @@ export interface Facility {
   sector?: FacilitySector;  // industrial sector derived from NAICS / camdId
   naics?: string;           // primary NAICS code from ECHO
   triYears?: string[];      // Array of available reporting years if TRI facility
+  hasNei2023?: boolean;     // True if facility has 2023 NEI data
 }
 
 export interface StackParameter {
@@ -248,9 +249,9 @@ export interface NeiCountyData {
  * Returns criteria air pollutants (SO₂, NOₓ, PM₂.₅, CO, VOC, etc.) and top HAPs.
  * @param eisId — NEI/EIS facility ID (from ECHO EisIDs field)
  */
-export async function fetchNeiFacility(eisId: string): Promise<NeiFacilityData> {
+export async function fetchNeiFacility(eisId: string, year: string = '2023'): Promise<NeiFacilityData> {
   try {
-    const res = await fetch(`/api/nei-facility?eisId=${encodeURIComponent(eisId)}`);
+    const res = await fetch(`/api/nei-facility?eisId=${encodeURIComponent(eisId)}&year=${year}`);
     if (!res.ok) return { found: false, emissions: [], haps: [] };
     return await res.json();
   } catch (err) {

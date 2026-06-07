@@ -29,12 +29,14 @@ interface ToxicsTabProps {
   aqsLoading: boolean;
   filterReported: boolean;
   mapTriYear: string;
+  neiYear: '2020' | '2023';
+  setNeiYear: (y: '2020' | '2023') => void;
 }
 
 export default function ToxicsTab({
   selectedFacility, neiData, setNeiData, neiLoading, setNeiLoading, isMounted,
   aqsMonitors, showAqsMonitors, handleAqsToggle, aqsError, aqsLoading,
-  filterReported, mapTriYear,
+  filterReported, mapTriYear, neiYear, setNeiYear,
 }: ToxicsTabProps) {
   const [toxics, setToxics] = useState<HapRecord[]>([]);
   const [toxicsYear, setToxicsYear] = useState<number | string | null>(null);
@@ -54,7 +56,7 @@ export default function ToxicsTab({
 
       if (selectedFacility.eisId) {
         setNeiLoading(true);
-        fetchNeiFacility(selectedFacility.eisId)
+        fetchNeiFacility(selectedFacility.eisId, neiYear)
           .then(result => { if (!cancelled) { setNeiData(result); setNeiLoading(false); } })
           .catch(() => { if (!cancelled) setNeiLoading(false); });
       }
@@ -73,7 +75,7 @@ export default function ToxicsTab({
 
     load();
     return () => { cancelled = true; };
-  }, [selectedFacility.id]);
+  }, [selectedFacility.id, neiYear]);
 
   // Ambient context panel
   const nearest = getNearestMonitor(selectedFacility.lat, selectedFacility.lon, aqsMonitors);
@@ -306,36 +308,63 @@ export default function ToxicsTab({
           </div>
         )}
 
-        {/* NEI 2020 HAPs */}
-        {(neiLoading || (neiData?.found && neiData.haps.length > 0)) && (
+        {/* NEI HAPs */}
+        {selectedFacility.eisId && (
           <div className="border-t border-slate-100 pt-5 mt-2">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                <BarChart3 className="h-3 w-3" /> NEI 2020 HAPs
+                <BarChart3 className="h-3 w-3" /> NEI HAPs
               </h3>
-              {!neiLoading && (
-                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">2020 NEI</span>
-              )}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                <button
+                  onClick={() => setNeiYear('2020')}
+                  className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
+                    neiYear === '2020'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  2020
+                </button>
+                <button
+                  onClick={() => setNeiYear('2023')}
+                  className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
+                    neiYear === '2023'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  2023
+                </button>
+              </div>
             </div>
             {neiLoading ? (
               <div className="flex items-center gap-2 text-xs text-slate-400 italic py-3">
-                <Loader2 className="h-3 w-3 animate-spin" /> Querying NEI 2020…
+                <Loader2 className="h-3 w-3 animate-spin" /> Querying NEI {neiYear}…
               </div>
             ) : (
               <>
-                <p className="text-[9px] text-slate-400 mb-2">
-                  Hazardous air pollutants (HAPs) — 2020 NEI facility-reported, actual emissions.
-                </p>
-                <div className="space-y-1">
-                  {neiData!.haps.map((h, i) => (
-                    <div key={i} className="flex items-center justify-between bg-violet-50/60 p-1.5 rounded border border-violet-100">
-                      <span className="text-[9px] font-medium text-slate-600 truncate max-w-[60%]">{h.pollutant}</span>
-                      <span className="text-[9px] font-bold text-violet-700 ml-1 shrink-0">
-                        {h.amount < 0.0001 ? '<0.0001' : h.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })} TPY
-                      </span>
+                {neiData?.found && neiData.haps.length > 0 ? (
+                  <>
+                    <p className="text-[9px] text-slate-400 mb-2">
+                      Hazardous air pollutants (HAPs) — {neiYear} NEI facility-reported, actual emissions.
+                    </p>
+                    <div className="space-y-1">
+                      {neiData.haps.map((h, i) => (
+                        <div key={i} className="flex items-center justify-between bg-violet-50/60 p-1.5 rounded border border-violet-100">
+                          <span className="text-[9px] font-medium text-slate-600 truncate max-w-[60%]">{h.pollutant}</span>
+                          <span className="text-[9px] font-bold text-violet-700 ml-1 shrink-0">
+                            {h.amount < 0.0001 ? '<0.0001' : h.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })} TPY
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <p className="text-[10px] text-slate-400 italic py-3 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                    No NEI {neiYear} HAPs data reported for this facility.
+                  </p>
+                )}
                 {neiData?.county && <p className="text-[9px] text-slate-300 mt-2">County: {neiData.county} · FIPS: {neiData.fips}</p>}
               </>
             )}

@@ -58,7 +58,7 @@ export default function EmissionsDashboard() {
       const data = await res.json();
       if (data.success) {
         dispatch({ type: 'SET_NEI_SYNC_STATUS', payload: 'up-to-date' });
-        const facRes = await fetch(`/api/facilities?state=${selectedStateRef.current}`);
+        const facRes = await fetch(`/api/facilities?state=${selectedStateRef.current}&v=1.0.2`);
         if (facRes.ok) {
           const facData = await facRes.json();
           dispatch({ type: 'SET_FACILITIES', payload: facData });
@@ -102,7 +102,7 @@ export default function EmissionsDashboard() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
-    fetch(`/api/facilities?state=${selectedState}`, { signal: controller.signal })
+    fetch(`/api/facilities?state=${selectedState}&v=1.0.2`, { signal: controller.signal })
       .then(res => { clearTimeout(timeoutId); if (!res.ok) throw new Error('API Response Error'); return res.json(); })
       .then(data => {
         dispatch({ type: 'SET_FACILITIES', payload: data });

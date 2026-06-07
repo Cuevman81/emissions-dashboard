@@ -131,6 +131,7 @@ export default function PsdTab({
           <div className="flex items-center gap-1">
             <button
               onClick={() => setShowManualEmissionForm(!showManualEmissionForm)}
+              aria-expanded={showManualEmissionForm}
               className="text-[9px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
             >
               {showManualEmissionForm ? 'Cancel' : '+ Add Data'}
@@ -147,8 +148,8 @@ export default function PsdTab({
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
             <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase">Add Manual Emission Record</p>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <input id="manual-pollutant" placeholder="Pollutant (e.g. PM2.5)" className="text-xs p-1.5 border rounded" />
-              <input id="manual-amount" type="number" placeholder="Amount (TPY)" className="text-xs p-1.5 border rounded" />
+              <input id="manual-pollutant" placeholder="Pollutant (e.g. PM2.5)" aria-label="Pollutant name" className="text-xs p-1.5 border rounded" />
+              <input id="manual-amount" type="number" placeholder="Amount (TPY)" aria-label="Emission amount in TPY" className="text-xs p-1.5 border rounded" />
             </div>
             <button
               onClick={() => {
@@ -346,6 +347,8 @@ export default function PsdTab({
             <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
               <button
                 onClick={() => setNeiYear('2020')}
+                aria-label="Select NEI 2020 emission data"
+                aria-pressed={neiYear === '2020'}
                 className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
                   neiYear === '2020'
                     ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
@@ -356,6 +359,8 @@ export default function PsdTab({
               </button>
               <button
                 onClick={() => setNeiYear('2023')}
+                aria-label="Select NEI 2023 emission data"
+                aria-pressed={neiYear === '2023'}
                 className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
                   neiYear === '2023'
                     ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'

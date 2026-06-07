@@ -290,7 +290,12 @@ export default function FacilityInventoryTab({
               return (
                 <div
                   key={sector}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Filter by sector: ${sector}`}
+                  aria-pressed={isSelected}
                   onClick={() => onSectorSelect(isSelected ? null : sector)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSectorSelect(isSelected ? null : sector); } }}
                   className={`flex items-center gap-2 cursor-pointer p-1.5 rounded-lg border transition-all ${
                     isSelected
                       ? 'bg-indigo-50/80 border-indigo-200/60 shadow-sm'

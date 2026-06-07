@@ -182,6 +182,7 @@ export default function ToxicsTab({
                 setToxicsYear(data.year);
                 setToxicsLoading(false);
               }}
+              aria-label="Select TRI reporting year"
               className="text-[10px] font-bold px-2 py-1 rounded bg-purple-100 text-purple-700 border-none outline-none focus:ring-1 focus:ring-purple-400 cursor-pointer"
             >
               {availableToxicsYears.map(yr => (
@@ -318,6 +319,8 @@ export default function ToxicsTab({
               <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                 <button
                   onClick={() => setNeiYear('2020')}
+                  aria-label="Select NEI 2020 HAPs data"
+                  aria-pressed={neiYear === '2020'}
                   className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
                     neiYear === '2020'
                       ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
@@ -328,6 +331,8 @@ export default function ToxicsTab({
                 </button>
                 <button
                   onClick={() => setNeiYear('2023')}
+                  aria-label="Select NEI 2023 HAPs data"
+                  aria-pressed={neiYear === '2023'}
                   className={`text-[9px] font-bold px-2 py-0.5 rounded transition-all ${
                     neiYear === '2023'
                       ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'

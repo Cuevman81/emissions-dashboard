@@ -131,6 +131,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
             <select
               value={pollutantFilter}
               onChange={e => setPollutantFilter(e.target.value)}
+              aria-label="Filter by pollutant"
               className="text-[10px] font-bold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 outline-none cursor-pointer"
             >
               <option value="All">All Pollutants</option>
@@ -141,6 +142,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
             <select
               value={endYear || latestYear}
               onChange={e => setEndYear(parseInt(e.target.value))}
+              aria-label="Select design value year"
               className="text-[10px] font-bold px-2 py-1 rounded bg-slate-50 text-slate-700 border border-slate-200 outline-none cursor-pointer"
             >
               {yearsList.map(yr => (
@@ -162,6 +164,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
             <button
               key={p}
               onClick={() => setPollutantFilter(pollutantFilter === p ? 'All' : p)}
+              aria-pressed={pollutantFilter === p}
               className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
                 pollutantFilter === p ? 'ring-2 ring-offset-1' : ''
               } ${exceedances > 0
@@ -308,6 +311,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       <div className="border-t border-slate-100 pt-4">
         <button
           onClick={() => setShowCompleteness(!showCompleteness)}
+          aria-expanded={showCompleteness}
           className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-700 transition-colors"
         >
           {showCompleteness ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -352,6 +356,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       <div className="border-t border-slate-100 pt-4">
         <button
           onClick={() => setShowTrends(!showTrends)}
+          aria-expanded={showTrends}
           className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-700 transition-colors"
         >
           {showTrends ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

@@ -118,7 +118,7 @@ export default function RadiusMap({
   const hasClassI = classIGeoJson && classIGeoJson.features.length > 0;
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }} role="application" aria-label="Interactive facility emissions radius map">
     <MapContainer
       center={defaultCenter}
       zoom={7}
@@ -236,7 +236,7 @@ export default function RadiusMap({
     </MapContainer>
 
     {/* Map legend — bottom-right, above Leaflet attribution */}
-    <div style={{
+    <div role="complementary" aria-label="Map legend" style={{
       position: 'absolute', bottom: '30px', right: '10px', zIndex: 1000,
       background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)',
       border: '1px solid #e2e8f0', borderRadius: '8px',

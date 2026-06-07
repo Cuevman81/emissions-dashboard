@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MS DEQ Air Division Dashboard
+
+An interactive web application designed for air quality analysis, Prevention of Significant Deterioration (PSD) cumulative impact screening, National Ambient Air Quality Standards (NAAQS) compliance tracking, and Air Toxics evaluation.
+
+Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Division**.
+
+---
+
+## Key Features
+
+* **Interactive Proximity Map**: Map facilities statewide, calculate distances within custom radii, and filter by permit classification (Title V Major, Synthetic Minor, Minor/Other) and data source.
+* **Federal Class I Areas Overlay**: Map national wilderness areas and parks subject to regional haze and PSD increment regulations.
+* **NEI 2023 Point Source Integration**: Dynamic toggle between 2020 and 2023 National Emissions Inventory (NEI) datasets for Criteria Air Pollutant (CAP) and Hazardous Air Pollutant (HAP) modeling.
+* **Toxics Release Inventory (TRI) Trends**: Analyze historical HAP releases and emissions trajectories.
+* **EPA AQS Monitor Live Feeds**: Connects directly to EPA's AQS service to identify active monitoring networks, coordinate parameters, and view site details.
+* **NAAQS Attainment & Trends**: Dynamic queries connecting to the EPA ArcGIS FeatureServer to retrieve CFR-compliant certified Design Values (DVs) for criteria pollutants, including 10-year trends and data completeness indicators.
+
+---
+
+## Data Sources
+
+1. **EPA ECHO API**: Real-time Clean Air Act (CAA) regulated facility inventories.
+2. **EPA National Emissions Inventory (NEI)**: 2020 and 2023 Point Source data (locally parsed and compiled for Mississippi).
+3. **EPA Toxics Release Inventory (TRI)**: Multi-year release summaries.
+4. **EPA ArcGIS FeatureServer**: Live, CFR-compliant NAAQS Design Value records.
+5. **EPA AQS Service**: Ambient monitor parameters and sample metadata.
+
+---
+
+## Tech Stack
+
+* **Framework**: [Next.js](https://nextjs.org/) (App Router, Turbopack)
+* **Frontend**: React, Tailwind CSS
+* **Mapping**: Leaflet, [react-leaflet](https://react-leaflet.js.org/)
+* **Charts**: [Recharts](https://recharts.org/)
+* **State Management**: Consolidated React `useReducer` state machine
+* **Accessibility**: Fully WCAG 2.1 compliant (ARIA landmarks, labels, keyboard navigation)
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+* Node.js (v18 or higher)
+* npm (v9 or higher)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Cuevman81/emissions-dashboard.git
+   cd emissions-dashboard
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment on Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This application is fully optimized for serverless deployment on Vercel:
+* **Serverless Caching**: Automatically falls back to `/tmp` in serverless environments for writing temporary API logs and session caches, preventing read-only filesystem crashes.
+* **Stateless Operation**: Pre-compiled datasets (NEI 2023, TRI emissions) are packed with the build for instant load times without external database dependencies.

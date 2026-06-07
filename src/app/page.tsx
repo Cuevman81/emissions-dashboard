@@ -37,7 +37,7 @@ export default function EmissionsDashboard() {
   const [radiusMi, setRadiusMi] = useState(50);
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'camd' | 'tri' | 'major' | 'synthetic' | 'minor'>('all');
+  const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'nei2023' | 'camd' | 'tri' | 'major' | 'synthetic' | 'minor'>('all');
   const [mapTriYear, setMapTriYear] = useState<string>('All');
   const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('inventory');
@@ -153,7 +153,7 @@ export default function EmissionsDashboard() {
   useEffect(() => {
     if (activeTab === 'psd' && mapFilter === 'tri') {
       setMapFilter('all');
-    } else if (activeTab === 'toxics' && mapFilter === 'nei') {
+    } else if (activeTab === 'toxics' && (mapFilter === 'nei' || mapFilter === 'nei2023')) {
       setMapFilter('all');
     }
   }, [activeTab, mapFilter]);
@@ -165,6 +165,8 @@ export default function EmissionsDashboard() {
       if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
     } else if (mapFilter === 'nei') {
       sourceList = sourceList.filter(f => f.eisId);
+    } else if (mapFilter === 'nei2023') {
+      sourceList = sourceList.filter(f => f.hasNei2023);
     } else if (mapFilter === 'camd') {
       sourceList = sourceList.filter(f => f.camdId);
     } else if (mapFilter === 'major') {
@@ -191,6 +193,8 @@ export default function EmissionsDashboard() {
       if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
     } else if (mapFilter === 'nei') {
       sourceList = sourceList.filter(f => f.eisId);
+    } else if (mapFilter === 'nei2023') {
+      sourceList = sourceList.filter(f => f.hasNei2023);
     } else if (mapFilter === 'camd') {
       sourceList = sourceList.filter(f => f.camdId);
     } else if (mapFilter === 'major') {
@@ -479,7 +483,7 @@ export default function EmissionsDashboard() {
                             ? 'bg-purple-600 text-white border-purple-600'
                             : mapFilter === 'camd'
                               ? 'bg-blue-600 text-white border-blue-600'
-                              : mapFilter === 'nei'
+                              : (mapFilter === 'nei' || mapFilter === 'nei2023')
                                 ? 'bg-violet-600 text-white border-violet-600'
                                 : mapFilter === 'major'
                                   ? 'bg-red-600 text-white border-red-600'
@@ -490,7 +494,10 @@ export default function EmissionsDashboard() {
                     >
                       <option value="all" className="bg-white text-slate-700">Filter: None (Show All)</option>
                       {(activeTab === 'inventory' || activeTab === 'psd' || activeTab === 'naaqs') && (
-                        <option value="nei" className="bg-white text-slate-700">Filter: NEI 2020 Reporters</option>
+                        <>
+                          <option value="nei" className="bg-white text-slate-700">Filter: NEI 2020 Reporters</option>
+                          <option value="nei2023" className="bg-white text-slate-700">Filter: NEI 2023 Reporters</option>
+                        </>
                       )}
                       <option value="camd" className="bg-white text-slate-700">Filter: CAMD (Power Plants)</option>
                       {(activeTab === 'inventory' || activeTab === 'toxics' || activeTab === 'naaqs') && (

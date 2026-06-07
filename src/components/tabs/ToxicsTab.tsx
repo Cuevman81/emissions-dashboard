@@ -270,7 +270,7 @@ export default function ToxicsTab({
                             <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
                             <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(val) => val < 1 && val > 0 ? '<1' : val} />
                             <Tooltip content={<CustomTooltip />} position={{ x: -175, y: 15 }} />
-                            <Legend wrapperStyle={{ fontSize: '9px', marginTop: '10px' }} iconType="circle" />
+                            <Legend wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} iconType="circle" height={36} verticalAlign="bottom" />
                             {linesToRender.map((pollutant, idx) => (
                               <Line
                                 key={pollutant} type="monotone" dataKey={pollutant}

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts';
 import { Loader2, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { fetchNaaqsDesignValues, NaaqsDesignValue, NaaqsTrend, NaaqsCompleteness } from '@/lib/data-service';
+import { NaaqsTooltip } from '@/components/ChartTooltips';
 
 const POLLUTANT_ORDER = ['O3', 'PM2.5', 'PM10', 'NO2', 'SO2', 'CO'];
 const POLLUTANT_COLORS: Record<string, string> = {
@@ -269,17 +270,14 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
                     </h4>
                     <span className="text-[9px] text-slate-400">{units}</span>
                   </div>
-                  <div className="h-48 w-full">
+                  <div className="h-64 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData}>
+                      <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
                         <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          contentStyle={{ fontSize: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                          labelStyle={{ fontWeight: 'bold' }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: '8px' }} iconType="circle" />
+                        <Tooltip content={<NaaqsTooltip />} position={{ y: 10 }} />
+                        <Legend wrapperStyle={{ fontSize: '8px', paddingTop: '10px' }} iconType="circle" height={40} verticalAlign="bottom" />
                         <ReferenceLine
                           y={refNaaqs}
                           stroke="#ef4444"

@@ -130,6 +130,20 @@ export default function EmissionsDashboard() {
     return filterByRadius(sourceList, center[0], center[1], radiusMi);
   }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear]);
 
+  const proximityFacilities = useMemo(() => {
+    let sourceList = allFacilities;
+    if (mapFilter === 'tri') {
+      sourceList = sourceList.filter(f => f.triId);
+      if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
+    } else if (mapFilter === 'nei') {
+      sourceList = sourceList.filter(f => f.eisId);
+    } else if (mapFilter === 'camd') {
+      sourceList = sourceList.filter(f => f.camdId);
+    }
+    if (!center) return showAll ? sourceList : [];
+    return filterByRadius(sourceList, center[0], center[1], radiusMi);
+  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear]);
+
   const handleFacilityClick = (f: Facility) => {
     setSelectedFacility(f);
     setSelectedMonitor(null);
@@ -138,9 +152,9 @@ export default function EmissionsDashboard() {
   };
 
   const handleExport = async () => {
-    if (nearbyFacilities.length === 0) return;
-    const eisIds = nearbyFacilities.map(f => f.eisId).filter(Boolean) as string[];
-    const triIds = nearbyFacilities.map(f => f.triId).filter(Boolean) as string[];
+    if (proximityFacilities.length === 0) return;
+    const eisIds = proximityFacilities.map(f => f.eisId).filter(Boolean) as string[];
+    const triIds = proximityFacilities.map(f => f.triId).filter(Boolean) as string[];
     const mode = activeTab === 'toxics' ? 'Toxics' : 'PSD';
 
     let enrichedData: Record<string, any> = {};
@@ -163,7 +177,7 @@ export default function EmissionsDashboard() {
 
     const csvContent = [
       headers.join(','),
-      ...nearbyFacilities.map(f => {
+      ...proximityFacilities.map(f => {
         const row = [`"${f.name}"`, f.id, f.triId || '', f.eisId || '', `"${f.address}"`, f.city, f.state, f.permitType || '', f.isMajor ? 'Y' : 'N', f.hasHpv ? 'Y' : 'N', f.lat, f.lon, f.distance?.toFixed(2)];
         if (mode === 'PSD') {
           const d = enrichedData[f.eisId || ''] || {};
@@ -318,7 +332,7 @@ export default function EmissionsDashboard() {
                 </div>
                 <button
                   onClick={handleExport}
-                  disabled={nearbyFacilities.length === 0}
+                  disabled={proximityFacilities.length === 0}
                   className="bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-slate-200"
                 >
                   <Download className="h-3.5 w-3.5" /> Export
@@ -415,7 +429,7 @@ export default function EmissionsDashboard() {
               <CardHeader className="py-4">
                 <CardTitle className="text-sm font-bold text-slate-600 uppercase tracking-tight flex items-center gap-2">
                   <Database className="h-4 w-4 text-emerald-500" />
-                  Nearby Facilities ({nearbyFacilities.length})
+                  Nearby Facilities ({proximityFacilities.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -434,14 +448,14 @@ export default function EmissionsDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {nearbyFacilities.length === 0 ? (
+                      {proximityFacilities.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="px-4 py-12 text-center text-slate-400 italic">
                             {center ? 'No facilities found in this radius.' : 'Click the map to identify surrounding facilities.'}
                           </td>
                         </tr>
                       ) : (
-                        nearbyFacilities.map(f => (
+                        proximityFacilities.map(f => (
                           <tr key={f.id} className={`hover:bg-blue-50/50 transition-colors ${selectedFacility?.id === f.id ? 'bg-blue-50' : ''}`}>
                             <td className="px-4 py-3 font-medium text-slate-900">{f.name}</td>
                             <td className="px-4 py-3 text-slate-500">{f.city}</td>

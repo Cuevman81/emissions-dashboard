@@ -40,21 +40,60 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
     return () => { cancelled = true; };
   }, [selectedState, endYear]);
 
-  const filteredDvs = useMemo(() => {
-    if (pollutantFilter === 'All') return designValues;
-    return designValues.filter(dv => dv.pollutant === pollutantFilter);
-  }, [designValues, pollutantFilter]);
+  // Helper: exclude Jackson NCORE from NO2 data (Pascagoula is the only relevant NO2 site for MS)
+  const isNcoreNO2 = (pollutant: string, siteName: string) =>
+    pollutant === 'NO2' && siteName.toLowerCase().includes('ncore');
+
+  // Count unique sites per pollutant for badges
+  const pollutantSiteCounts = useMemo(() => {
+    const counts: Record<string, { sites: number; exceedances: number }> = {};
+    for (const p of POLLUTANT_ORDER) {
+      const dvs = designValues.filter(dv => dv.pollutant === p && !isNcoreNO2(dv.pollutant, dv.siteName));
+      const uniqueSites = new Set(dvs.map(dv => dv.siteId));
+      const exceedingSites = new Set(dvs.filter(dv => dv.status === 'Exceedance').map(dv => dv.siteId));
+      if (uniqueSites.size > 0) {
+        counts[p] = { sites: uniqueSites.size, exceedances: exceedingSites.size };
+      }
+    }
+    return counts;
+  }, [designValues]);
 
   const activePollutants = useMemo(() => {
-    const set = new Set(designValues.map(dv => dv.pollutant));
-    return POLLUTANT_ORDER.filter(p => set.has(p));
-  }, [designValues]);
+    return POLLUTANT_ORDER.filter(p => pollutantSiteCounts[p]);
+  }, [pollutantSiteCounts]);
+
+  // Filter DVs — exclude PM10 from the table (exceedance-based, not a numeric DV) + NCORE from NO2
+  const filteredDvs = useMemo(() => {
+    let dvs = designValues.filter(dv => dv.pollutant !== 'PM10' && !isNcoreNO2(dv.pollutant, dv.siteName));
+    if (pollutantFilter !== 'All') dvs = dvs.filter(dv => dv.pollutant === pollutantFilter);
+    return dvs;
+  }, [designValues, pollutantFilter]);
+
+  // Group PM2.5 rows by site for combined display
+  const pm25Sites = useMemo(() => {
+    const pm25Dvs = filteredDvs.filter(dv => dv.pollutant === 'PM2.5');
+    const siteMap = new Map<string, { annual?: NaaqsDesignValue; daily?: NaaqsDesignValue }>();
+    for (const dv of pm25Dvs) {
+      if (!siteMap.has(dv.siteId)) siteMap.set(dv.siteId, {});
+      const entry = siteMap.get(dv.siteId)!;
+      if (dv.metric.includes('Annual')) entry.annual = dv;
+      else entry.daily = dv;
+    }
+    return siteMap;
+  }, [filteredDvs]);
+
+  // Non-PM2.5 DVs (displayed in the regular table)
+  const nonPM25Dvs = useMemo(() => {
+    return filteredDvs.filter(dv => dv.pollutant !== 'PM2.5');
+  }, [filteredDvs]);
 
   const trendsByPollutant = useMemo(() => {
     const map: Record<string, NaaqsTrend[]> = {};
     const pollutants = pollutantFilter === 'All' ? activePollutants : [pollutantFilter];
     for (const p of pollutants) {
-      map[p] = trends.filter(t => t.pollutant === p);
+      // Exclude PM10 trends (exceedance days, not useful for charting)
+      if (p === 'PM10') continue;
+      map[p] = trends.filter(t => t.pollutant === p && !isNcoreNO2(t.pollutant, t.siteName));
     }
     return map;
   }, [trends, pollutantFilter, activePollutants]);
@@ -64,10 +103,13 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       <div className="flex flex-col items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mb-3" />
         <p className="text-sm text-slate-500 font-medium">Loading NAAQS Design Values...</p>
-        <p className="text-[10px] text-slate-400 mt-1">Querying EPA AQS for {selectedState} ({endYear - 9}–{endYear})</p>
+        <p className="text-[10px] text-slate-400 mt-1">Querying EPA for {selectedState} ({endYear})</p>
       </div>
     );
   }
+
+  const showPM25 = pollutantFilter === 'All' || pollutantFilter === 'PM2.5';
+  const showOtherTable = nonPM25Dvs.length > 0 && pollutantFilter !== 'PM2.5';
 
   return (
     <div className="space-y-6">
@@ -105,8 +147,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       {/* Summary badges */}
       <div className="flex flex-wrap gap-2">
         {activePollutants.map(p => {
-          const dvs = designValues.filter(dv => dv.pollutant === p);
-          const exceedances = dvs.filter(dv => dv.status === 'Exceedance').length;
+          const { sites, exceedances } = pollutantSiteCounts[p];
           return (
             <button
               key={p}
@@ -119,19 +160,79 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
               }`}
               style={pollutantFilter === p ? { outlineColor: POLLUTANT_COLORS[p] } : {}}
             >
-              {p}: {dvs.length} sites {exceedances > 0 && `(${exceedances} exceed)`}
+              {p}: {sites} {sites === 1 ? 'site' : 'sites'} {exceedances > 0 && `(${exceedances} exceed)`}
             </button>
           );
         })}
       </div>
 
-      {/* Design Value Table */}
-      {filteredDvs.length === 0 ? (
-        <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-          <ShieldAlert className="h-5 w-5 text-slate-300 mx-auto mb-2" />
-          <p className="text-[10px] text-slate-400">No design values available for this selection.</p>
+      {/* PM2.5 Combined Table — Annual + 24-hr side by side */}
+      {showPM25 && pm25Sites.size > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: POLLUTANT_COLORS['PM2.5'] }}>PM2.5</span>
+            <span className="text-[9px] text-slate-400">Annual NAAQS: 9.0 µg/m³ · 24-hr NAAQS: 35 µg/m³</span>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[10px]">
+              <thead className="bg-purple-50/50 border-b border-slate-200">
+                <tr>
+                  <th className="px-3 py-2 text-left font-bold text-slate-500">Site</th>
+                  <th className="px-3 py-2 text-left font-bold text-slate-500">County</th>
+                  <th className="px-3 py-2 text-right font-bold text-purple-600">Annual DV</th>
+                  <th className="px-3 py-2 text-center font-bold text-slate-400">Status</th>
+                  <th className="px-3 py-2 text-right font-bold text-purple-600">24-hr DV</th>
+                  <th className="px-3 py-2 text-center font-bold text-slate-400">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Array.from(pm25Sites.entries())
+                  .sort(([, a], [, b]) => (a.annual?.siteName || '').localeCompare(b.annual?.siteName || ''))
+                  .map(([siteId, { annual, daily }]) => {
+                    const siteName = annual?.siteName || daily?.siteName || '';
+                    const county = annual?.county || daily?.county || '';
+                    const annualExceed = annual?.status === 'Exceedance';
+                    const dailyExceed = daily?.status === 'Exceedance';
+                    const rowHighlight = annualExceed || dailyExceed;
+                    return (
+                      <tr key={siteId} className={rowHighlight ? 'bg-red-50/50' : 'hover:bg-slate-50'}>
+                        <td className="px-3 py-2 text-slate-700 truncate max-w-[120px]" title={siteName}>{siteName}</td>
+                        <td className="px-3 py-2 text-slate-500">{county}</td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">
+                          {annual ? annual.designValue.toFixed(1) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {annual && (
+                            <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${
+                              annualExceed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                            }`}>
+                              {annualExceed ? '> 9.0' : '✓'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">
+                          {daily ? daily.designValue.toFixed(0) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {daily && (
+                            <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${
+                              dailyExceed ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                            }`}>
+                              {dailyExceed ? '> 35' : '✓'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      ) : (
+      )}
+
+      {/* Other Pollutants Table (O3, NO2, SO2, CO) */}
+      {showOtherTable && (
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full text-[10px]">
             <thead className="bg-slate-50 border-b border-slate-200">
@@ -146,7 +247,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredDvs
+              {nonPM25Dvs
                 .sort((a, b) => POLLUTANT_ORDER.indexOf(a.pollutant) - POLLUTANT_ORDER.indexOf(b.pollutant) || a.siteName.localeCompare(b.siteName))
                 .map((dv, i) => (
                   <tr key={i} className={dv.status === 'Exceedance' ? 'bg-red-50/50' : 'hover:bg-slate-50'}>
@@ -171,6 +272,25 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
                 ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* PM10 note — exceedance-based, no concentration DV */}
+      {(pollutantFilter === 'All' || pollutantFilter === 'PM10') && pollutantSiteCounts['PM10'] && (
+        <div className="bg-amber-50/50 rounded-lg border border-amber-200 px-4 py-3">
+          <p className="text-[10px] font-bold text-amber-700 mb-1">PM10 — 24-hr Standard (150 µg/m³)</p>
+          <p className="text-[9px] text-amber-600">
+            PM10 uses an exceedance-based form: not to be exceeded more than once per year on avg over 3 years.
+            {pollutantSiteCounts['PM10'].sites} monitor site{pollutantSiteCounts['PM10'].sites > 1 ? 's' : ''} in {selectedState} — 0 estimated exceedance days. In attainment.
+          </p>
+        </div>
+      )}
+
+      {/* No data fallback */}
+      {filteredDvs.length === 0 && pollutantFilter !== 'PM10' && (
+        <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+          <ShieldAlert className="h-5 w-5 text-slate-300 mx-auto mb-2" />
+          <p className="text-[10px] text-slate-400">No design values available for this selection.</p>
         </div>
       )}
 
@@ -232,16 +352,16 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
             {Object.entries(trendsByPollutant).map(([pollutant, pollTrends]) => {
               if (pollTrends.length === 0) return null;
 
-              // Get unique metrics for this pollutant (e.g., "Annual Mean", "24-hr 98th Pctl")
+              // Get unique metrics for this pollutant
               const metrics = [...new Set(pollTrends.map(t => t.metric))];
               const naaqs = pollTrends[0].naaqs;
               const units = pollTrends[0].units;
 
-              // Pick the primary metric (first one, usually the most relevant)
+              // Pick the primary metric
               const primaryMetric = metrics[0];
               const metricTrends = pollTrends.filter(t => t.metric === primaryMetric);
 
-              // Build chart data: one point per year, columns per site
+              // Build chart data
               const sites = [...new Set(metricTrends.map(t => t.siteId))];
               const siteNames: Record<string, string> = {};
               metricTrends.forEach(t => { siteNames[t.siteId] = t.siteName; });
@@ -259,7 +379,6 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
               const siteLabels = sites.map(s => siteNames[s] || s);
               const lineColors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#64748b', '#ec4899', '#06b6d4'];
 
-              // Get NAAQS for reference line from the primary metric
               const refNaaqs = designValues.find(dv => dv.pollutant === pollutant)?.naaqs ?? naaqs;
 
               return (

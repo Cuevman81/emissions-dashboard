@@ -72,6 +72,8 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
           temp: parseFloat(p[3]),
           velocity: parseFloat(p[4]),
           flowRate: p[5] ? parseFloat(p[5]) : undefined,
+          dataSource: 'User' as const,
+          dataYear: String(new Date().getFullYear()),
         };
       }).filter(s => !isNaN(s.height));
 
@@ -109,6 +111,35 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
                     <AermodCopyButton line={aermodLine} />
                     <Wind className="h-3 w-3 text-slate-300" />
                   </div>
+                </div>
+
+                {/* Data provenance badge */}
+                <div className="flex items-center gap-2 mb-3">
+                  {s.dataSource === 'CAMD' && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
+                      Source: CAMD/CAMPD · {s.dataYear || 'Live'}
+                    </span>
+                  )}
+                  {s.dataSource === 'NEI' && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+                      Source: NEI/EIS · {s.dataYear || '2020'}
+                    </span>
+                  )}
+                  {s.dataSource === 'Estimate' && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                      ⚠ Estimated · NAICS Industry Median
+                    </span>
+                  )}
+                  {s.dataSource === 'User' && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                      Source: User-provided
+                    </span>
+                  )}
+                  {!s.dataSource && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                      Source: Unknown
+                    </span>
+                  )}
                 </div>
 
                 {/* Stack parameters — imperial display */}
@@ -263,12 +294,14 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
                     const v = parseFloat(vInput.value);
 
                     if (id && !isNaN(h) && !isNaN(d)) {
-                      onUpload([...stacks, { 
-                        stackId: id, 
-                        height: h, 
-                        diameter: d, 
-                        temp: !isNaN(t) ? t : undefined, 
-                        velocity: !isNaN(v) ? v : undefined 
+                      onUpload([...stacks, {
+                        stackId: id,
+                        height: h,
+                        diameter: d,
+                        temp: !isNaN(t) ? t : undefined,
+                        velocity: !isNaN(v) ? v : undefined,
+                        dataSource: 'User' as const,
+                        dataYear: String(new Date().getFullYear()),
                       }]);
                       setShowManualForm(false);
                       // Clear inputs

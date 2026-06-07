@@ -11,9 +11,6 @@ import {
   fetchNeiFacility,
   NeiFacilityData,
   AqsMonitor,
-  AqsSample,
-  fetchAqsSamples,
-  fetchAqsAnnualData,
   getNearestMonitor,
 } from '@/lib/data-service';
 
@@ -29,13 +26,6 @@ interface ToxicsTabProps {
   handleAqsToggle: () => void;
   aqsError: string | null;
   aqsLoading: boolean;
-  selectedMonitor: AqsMonitor | null;
-  setSelectedMonitor: (m: AqsMonitor | null) => void;
-  handleMonitorClick: (m: AqsMonitor, year?: string) => void;
-  aqsSamples: AqsSample[];
-  aqsAnnualData: any[];
-  aqsYear: string;
-  setAqsYear: (y: string) => void;
   filterReported: boolean;
   mapTriYear: string;
 }
@@ -43,8 +33,6 @@ interface ToxicsTabProps {
 export default function ToxicsTab({
   selectedFacility, neiData, setNeiData, neiLoading, setNeiLoading, isMounted,
   aqsMonitors, showAqsMonitors, handleAqsToggle, aqsError, aqsLoading,
-  selectedMonitor, setSelectedMonitor, handleMonitorClick,
-  aqsSamples, aqsAnnualData, aqsYear, setAqsYear,
   filterReported, mapTriYear,
 }: ToxicsTabProps) {
   const [toxics, setToxics] = useState<HapRecord[]>([]);
@@ -162,15 +150,13 @@ export default function ToxicsTab({
               </span>
             </div>
             <p className="text-[10px] text-indigo-600 mb-2 leading-tight">
-              Compared against measurements at <strong>{nearest.monitor.local_site_name || nearest.monitor.county}</strong> monitor.
+              Nearest ambient monitor: <strong>{nearest.monitor.local_site_name || nearest.monitor.county}</strong>.
+              {nearest.monitor.pollutants && nearest.monitor.pollutants.length > 0 && (
+                <> Monitors: {nearest.monitor.pollutants.slice(0, 4).join(', ')}{nearest.monitor.pollutants.length > 4 ? '...' : ''}.</>
+              )}
             </p>
-            <button
-              onClick={() => handleMonitorClick(nearest.monitor)}
-              className="w-full py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-sm"
-            >
-              View Monitor Measurements →
-            </button>
-            <div className="mt-3 pt-2 border-t border-indigo-100 flex justify-between text-[8px] font-mono text-indigo-400 uppercase tracking-tighter">
+            <p className="text-[8px] text-indigo-400 italic">See NAAQS tab for design values. Click monitor on map for details.</p>
+            <div className="mt-2 pt-2 border-t border-indigo-100 flex justify-between text-[8px] font-mono text-indigo-400 uppercase tracking-tighter">
               <span>Fac: {selectedFacility.lat.toFixed(3)}, {selectedFacility.lon.toFixed(3)}</span>
               <span>Mon: {nearest.monitor.lat.toFixed(3)}, {nearest.monitor.lon.toFixed(3)}</span>
             </div>

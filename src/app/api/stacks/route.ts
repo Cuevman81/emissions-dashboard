@@ -58,7 +58,9 @@ async function fetchCamdStackParameters(orisCode: string) {
                 stackId: locNames[locId] || 'UNIT',
                 height,
                 diameter,
-                description: `EGU Unit (CAMD/CEMS locId: ${locId})`
+                description: `EGU Unit (CAMD/CEMS locId: ${locId})`,
+                dataSource: 'CAMD',
+                dataYear: String(new Date().getFullYear()),
               });
             }
           }
@@ -153,7 +155,9 @@ function getFallbackIndustryStacks(naics: string | null, sector: string | null):
       diameter,
       temp,
       velocity,
-      description: `Estimated Industry Standard (EPA RSEI Median for ${sectorName})`
+      description: `Estimated Industry Standard (EPA RSEI Median for ${sectorName})`,
+      dataSource: 'Estimate' as const,
+      dataYear: undefined,
     }
   ];
 }
@@ -225,6 +229,8 @@ export async function GET(request: Request) {
             velocity: item.EXIT_GAS_VELOCITY_VALUE != null ? parseFloat(item.EXIT_GAS_VELOCITY_VALUE) : undefined,
             flowRate: item.EXIT_GAS_FLOW_RATE_VALUE != null ? parseFloat(item.EXIT_GAS_FLOW_RATE_VALUE) : undefined,
             description: item.RELEASE_POINT_DESCRIPTION || 'Point Source',
+            dataSource: 'NEI' as const,
+            dataYear: item.INVENTORY_YEAR ? String(item.INVENTORY_YEAR) : '2020',
           }))
           .filter(s => s.height > 0);
 

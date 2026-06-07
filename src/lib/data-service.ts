@@ -56,6 +56,8 @@ export interface StackParameter {
   velocity?: number;
   flowRate?: number;
   description?: string;
+  dataSource?: 'CAMD' | 'NEI' | 'Estimate' | 'User';  // where the stack data came from
+  dataYear?: string;                                     // year of the source data (e.g. '2020' for NEI)
 }
 
 export interface ToxicChemical {

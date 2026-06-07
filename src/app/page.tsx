@@ -8,10 +8,7 @@ import {
   filterByRadius,
   Facility,
   fetchAqsMonitors,
-  fetchAqsSamples,
-  fetchAqsAnnualData,
   AqsMonitor,
-  AqsSample,
   getNearestMonitor,
   NeiFacilityData,
   NeiCountyData,
@@ -19,12 +16,13 @@ import {
 } from '@/lib/data-service';
 import { US_STATES } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Search, MapPin, Wind, Database, Download, FlaskConical, BarChart3, AlertTriangle, Mountain, ShieldAlert, Activity, Clock } from 'lucide-react';
+import { Loader2, Search, MapPin, Wind, Database, Download, FlaskConical, BarChart3, AlertTriangle, Mountain, ShieldAlert, Activity } from 'lucide-react';
 import PermitBadge from '@/components/PermitBadge';
 import ErrorLogger from '@/components/ErrorLogger';
 import PsdTab from '@/components/tabs/PsdTab';
 import ToxicsTab from '@/components/tabs/ToxicsTab';
 import NaaqsTab from '@/components/tabs/NaaqsTab';
+import FacilityInventoryTab from '@/components/tabs/FacilityInventoryTab';
 
 const RadiusMap = dynamic(() => import('@/components/RadiusMap'), { ssr: false });
 
@@ -59,9 +57,6 @@ export default function EmissionsDashboard() {
   const [aqsMonitors, setAqsMonitors] = useState<AqsMonitor[]>([]);
   const [showAqsMonitors, setShowAqsMonitors] = useState(false);
   const [selectedMonitor, setSelectedMonitor] = useState<AqsMonitor | null>(null);
-  const [aqsSamples, setAqsSamples] = useState<AqsSample[]>([]);
-  const [aqsAnnualData, setAqsAnnualData] = useState<any[]>([]);
-  const [aqsYear, setAqsYear] = useState<string>('2024');
   const [aqsLoading, setAqsLoading] = useState(false);
   const [aqsError, setAqsError] = useState<string | null>(null);
   const [hasRefreshedSession, setHasRefreshedSession] = useState(false);
@@ -86,7 +81,6 @@ export default function EmissionsDashboard() {
     setAqsMonitors([]);
     setShowAqsMonitors(false);
     setSelectedMonitor(null);
-    setAqsSamples([]);
     setNeiData(null);
 
     const controller = new AbortController();
@@ -214,21 +208,9 @@ export default function EmissionsDashboard() {
     }
   };
 
-  const handleMonitorClick = async (monitor: AqsMonitor, forcedYear?: string) => {
+  const handleMonitorClick = (monitor: AqsMonitor) => {
     setSelectedFacility(null);
     setSelectedMonitor(monitor);
-    setAqsLoading(true);
-    setAqsSamples([]);
-    setAqsAnnualData([]);
-    const targetYear = forcedYear || aqsYear;
-    try {
-      const fetchers: Promise<any>[] = [fetchAqsSamples(monitor.id, targetYear)];
-      if (activeTab === 'toxics') fetchers.push(fetchAqsAnnualData(monitor.id));
-      const results = await Promise.all(fetchers);
-      setAqsSamples(results[0]);
-      if (results[1]) setAqsAnnualData(results[1]);
-    } catch (err) { console.warn('AQS data fetch failed:', err); }
-    finally { setAqsLoading(false); }
   };
 
   const mapDefaultCenter = STATE_CENTERS[selectedState] || [32.35, -89.39];
@@ -478,7 +460,18 @@ export default function EmissionsDashboard() {
 
           {/* Right Sidebar — switches based on active tab */}
           <div className="space-y-6">
-            {activeTab === 'naaqs' ? (
+            {activeTab === 'inventory' ? (
+              <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="bg-slate-900 text-white rounded-t-xl">
+                  <CardTitle className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
+                    <Database className="h-4 w-4" /> Facility Inventory
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <FacilityInventoryTab selectedState={selectedState} allFacilities={allFacilities} isMounted={isMounted} />
+                </CardContent>
+              </Card>
+            ) : activeTab === 'naaqs' ? (
               <Card className="border-slate-200 shadow-sm">
                 <CardHeader className="bg-emerald-900 text-white rounded-t-xl">
                   <CardTitle className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
@@ -494,7 +487,7 @@ export default function EmissionsDashboard() {
                 <CardHeader className={`text-white transition-colors duration-500 rounded-t-xl ${activeTab === 'toxics' ? 'bg-purple-900' : 'bg-slate-900'}`}>
                   <CardTitle className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
                     {activeTab === 'toxics' ? <FlaskConical className="h-4 w-4" /> : <Wind className="h-4 w-4" />}
-                    {activeTab === 'toxics' ? 'Toxics Inventory' : activeTab === 'psd' ? 'PSD / Emissions' : 'Facility Details'}
+                    {activeTab === 'toxics' ? 'Toxics Inventory' : 'PSD / Emissions'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
@@ -531,20 +524,75 @@ export default function EmissionsDashboard() {
                     </div>
                   )}
 
-                  {/* Monitor Detail View */}
+                  {/* Monitor Info Card */}
                   {selectedMonitor ? (
-                    <MonitorDetail
-                      monitor={selectedMonitor}
-                      selectedState={selectedState}
-                      aqsLoading={aqsLoading}
-                      aqsSamples={aqsSamples}
-                      aqsAnnualData={aqsAnnualData}
-                      aqsYear={aqsYear}
-                      setAqsYear={setAqsYear}
-                      handleMonitorClick={handleMonitorClick}
-                      setSelectedMonitor={setSelectedMonitor}
-                      activeTab={activeTab}
-                    />
+                    <div className="space-y-4">
+                      <div>
+                        <h2 className="text-lg font-bold text-indigo-900 leading-tight flex items-center gap-2">
+                          📡 {selectedMonitor.local_site_name || 'Monitoring Site'}
+                        </h2>
+                        <p className="text-sm text-slate-500 mt-1">{selectedMonitor.address || `${selectedMonitor.county} County`}, {selectedState}</p>
+                        <div className="mt-2 text-[10px] font-mono text-slate-400">AQS ID: {selectedMonitor.id}</div>
+                      </div>
+
+                      {/* Pollutants Monitored */}
+                      {selectedMonitor.pollutants && selectedMonitor.pollutants.length > 0 && (
+                        <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                          <h3 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <Activity className="h-3 w-3" /> Parameters Monitored
+                          </h3>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedMonitor.pollutants.map((p, i) => (
+                              <span key={i} className="text-[9px] font-bold px-2 py-1 rounded-full bg-white border border-indigo-200 text-indigo-700">
+                                {p}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Location */}
+                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Location</h3>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-[9px] text-slate-400">Latitude</p>
+                            <p className="font-mono font-bold text-slate-700">{selectedMonitor.lat.toFixed(4)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-400">Longitude</p>
+                            <p className="font-mono font-bold text-slate-700">{selectedMonitor.lon.toFixed(4)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-400">County</p>
+                            <p className="font-bold text-slate-700">{selectedMonitor.county}</p>
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-slate-400">Network</p>
+                            <p className="font-bold text-slate-700">
+                              {(selectedMonitor.local_site_name || '').includes('NCORE') ? 'NCore' : 'SLAMS'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* NAAQS pointer */}
+                      <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                        <p className="text-[10px] text-emerald-700 leading-relaxed">
+                          <strong>Design values and attainment status</strong> for this monitor are available on the <strong>NAAQS tab</strong>. Switch tabs to view certified EPA design values for all criteria pollutants.
+                        </p>
+                        <button
+                          onClick={() => { setActiveTab('naaqs'); setSelectedMonitor(null); }}
+                          className="mt-2 w-full py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-sm"
+                        >
+                          <ShieldAlert className="h-3 w-3" /> View NAAQS Design Values →
+                        </button>
+                      </div>
+
+                      <button onClick={() => setSelectedMonitor(null)} className="w-full py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                        Deselect Site
+                      </button>
+                    </div>
                   ) : selectedFacility ? (
                     <div className="space-y-6">
                       <div>
@@ -571,10 +619,6 @@ export default function EmissionsDashboard() {
                           isMounted={isMounted}
                           aqsMonitors={aqsMonitors} showAqsMonitors={showAqsMonitors}
                           handleAqsToggle={handleAqsToggle} aqsError={aqsError} aqsLoading={aqsLoading}
-                          selectedMonitor={selectedMonitor} setSelectedMonitor={setSelectedMonitor}
-                          handleMonitorClick={handleMonitorClick}
-                          aqsSamples={aqsSamples} aqsAnnualData={aqsAnnualData}
-                          aqsYear={aqsYear} setAqsYear={setAqsYear}
                           filterReported={filterReported} mapTriYear={mapTriYear}
                         />
                       ) : (
@@ -585,22 +629,6 @@ export default function EmissionsDashboard() {
                           isMounted={isMounted}
                         />
                       )}
-                    </div>
-                  ) : activeTab === 'toxics' && !selectedMonitor ? (
-                    <div className={`p-6 rounded-2xl border-2 transition-all duration-500 shadow-sm ${showAqsMonitors ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white border-slate-100 text-slate-900 group'}`}>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="p-2 rounded-xl bg-indigo-100 text-indigo-700"><FlaskConical className="h-6 w-6" /></div>
-                        <button onClick={handleAqsToggle} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${showAqsMonitors ? 'bg-white text-indigo-600 hover:bg-indigo-50' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
-                          {aqsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (showAqsMonitors ? 'Hide Monitors' : 'Show Monitors')}
-                        </button>
-                      </div>
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="text-base font-bold">Ambient AQS Monitoring</h3>
-                        {showAqsMonitors && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/30 text-white">{aqsMonitors.length} sites loaded</span>}
-                      </div>
-                      <p className={`text-xs opacity-80 leading-relaxed ${showAqsMonitors ? 'text-indigo-100' : 'text-slate-500'}`}>
-                        Toggle real-world Hazardous Air Pollutant (HAP) & Criteria measurements from EPA's Air Quality System monitors.
-                      </p>
                     </div>
                   ) : (
                     <div className="text-center py-20">
@@ -681,21 +709,29 @@ export default function EmissionsDashboard() {
             </div>
 
             {/* Quick Guide */}
-            <div className={`rounded-2xl p-6 text-white shadow-lg transition-colors duration-500 ${activeTab === 'toxics' ? 'bg-purple-600 shadow-purple-200' : activeTab === 'naaqs' ? 'bg-emerald-700 shadow-emerald-200' : 'bg-blue-600 shadow-blue-200'}`}>
+            <div className={`rounded-2xl p-6 text-white shadow-lg transition-colors duration-500 ${activeTab === 'inventory' ? 'bg-slate-700 shadow-slate-200' : activeTab === 'toxics' ? 'bg-purple-600 shadow-purple-200' : activeTab === 'naaqs' ? 'bg-emerald-700 shadow-emerald-200' : 'bg-blue-600 shadow-blue-200'}`}>
               <h3 className="font-bold text-lg mb-2">
-                {activeTab === 'naaqs' ? 'NAAQS' : activeTab === 'toxics' ? 'Toxics' : 'PSD'} Quick Guide
+                {activeTab === 'inventory' ? 'Inventory' : activeTab === 'naaqs' ? 'NAAQS' : activeTab === 'toxics' ? 'Toxics' : 'PSD'} Quick Guide
               </h3>
-              <p className={`text-xs leading-relaxed opacity-90 ${activeTab === 'toxics' ? 'text-purple-50' : activeTab === 'naaqs' ? 'text-emerald-50' : 'text-blue-100'}`}>
-                {activeTab === 'naaqs'
-                  ? 'Shows CFR-compliant NAAQS design values for all criteria pollutants. Data sourced from EPA AQS annual statistics with proper rounding rules for each pollutant.'
+              <p className={`text-xs leading-relaxed opacity-90 ${activeTab === 'inventory' ? 'text-slate-200' : activeTab === 'toxics' ? 'text-purple-50' : activeTab === 'naaqs' ? 'text-emerald-50' : 'text-blue-100'}`}>
+                {activeTab === 'inventory'
+                  ? 'High-level summary of all CAA-regulated facilities. Shows data freshness across EPA databases, permit breakdowns, and NAAQS attainment status at a glance.'
+                  : activeTab === 'naaqs'
+                  ? 'Shows CFR-compliant NAAQS design values for all criteria pollutants. Data sourced from EPA ArcGIS certified design values.'
                   : activeTab === 'toxics'
                   ? 'Displays HAP emissions from NEI/EIS for all CAA-regulated sources. TRI API is currently unavailable; NEI data covers all major & minor permitted sources with actual and PTE values.'
                   : 'Use radius search to identify surrounding facilities for PSD multi-source analysis. Major sources shown in red.'}
               </p>
-              <div className={`mt-4 pt-4 border-t ${activeTab === 'toxics' ? 'border-purple-500/30' : activeTab === 'naaqs' ? 'border-emerald-500/30' : 'border-blue-500/30'}`}>
-                <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${activeTab === 'toxics' ? 'text-purple-200' : activeTab === 'naaqs' ? 'text-emerald-200' : 'text-blue-200'}`}>Tips</p>
-                <ul className={`text-[10px] space-y-2 list-disc pl-4 ${activeTab === 'toxics' ? 'text-purple-50' : activeTab === 'naaqs' ? 'text-emerald-50' : 'text-blue-50'}`}>
-                  {activeTab === 'naaqs' ? (
+              <div className={`mt-4 pt-4 border-t ${activeTab === 'inventory' ? 'border-slate-500/30' : activeTab === 'toxics' ? 'border-purple-500/30' : activeTab === 'naaqs' ? 'border-emerald-500/30' : 'border-blue-500/30'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${activeTab === 'inventory' ? 'text-slate-300' : activeTab === 'toxics' ? 'text-purple-200' : activeTab === 'naaqs' ? 'text-emerald-200' : 'text-blue-200'}`}>Tips</p>
+                <ul className={`text-[10px] space-y-2 list-disc pl-4 ${activeTab === 'inventory' ? 'text-slate-200' : activeTab === 'toxics' ? 'text-purple-50' : activeTab === 'naaqs' ? 'text-emerald-50' : 'text-blue-50'}`}>
+                  {activeTab === 'inventory' ? (
+                    <>
+                      <li>Click a facility to view detailed PSD/Toxics data</li>
+                      <li>NEI publishes every 3 years — check for latest cycle</li>
+                      <li>NAAQS snapshot reflects EPA certified design values</li>
+                    </>
+                  ) : activeTab === 'naaqs' ? (
                     <>
                       <li>O₃ design values use truncation, not rounding</li>
                       <li>PM₂.₅ uses POC-filtered data per CFR requirements</li>
@@ -736,136 +772,3 @@ export default function EmissionsDashboard() {
   );
 }
 
-// ── Monitor Detail inline component (kept in page.tsx since it uses multiple parent callbacks) ──
-
-function MonitorDetail({ monitor, selectedState, aqsLoading, aqsSamples, aqsAnnualData, aqsYear, setAqsYear, handleMonitorClick, setSelectedMonitor, activeTab }: {
-  monitor: AqsMonitor; selectedState: string; aqsLoading: boolean;
-  aqsSamples: AqsSample[]; aqsAnnualData: any[]; aqsYear: string;
-  setAqsYear: (y: string) => void; handleMonitorClick: (m: AqsMonitor, year?: string) => void;
-  setSelectedMonitor: (m: AqsMonitor | null) => void; activeTab: ActiveTab;
-}) {
-  const criteriaParams = ['44201', '42401', '42602', '88101', '81102', '42101'];
-
-  let filteredSamples = aqsSamples;
-  if (activeTab === 'toxics') {
-    filteredSamples = aqsSamples.filter(s => !criteriaParams.includes(s.parameter_code));
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-indigo-900 leading-tight">📡 {monitor.local_site_name || 'Monitoring Site'}</h2>
-        <p className="text-sm text-slate-500 mt-1">{monitor.address || `${monitor.county} County`}, {selectedState}</p>
-        <div className="mt-2 text-[10px] font-mono text-slate-400">AQS ID: {monitor.id}</div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-            {activeTab === 'toxics' ? 'Ambient Toxics Measurements' : 'Ambient Monitor Data'}
-          </h3>
-          <select
-            value={aqsYear}
-            onChange={e => { const yr = e.target.value; setAqsYear(yr); handleMonitorClick(monitor, yr); }}
-            className="text-[10px] font-bold px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 outline-none focus:ring-1 focus:ring-indigo-400 cursor-pointer"
-          >
-            {['2025', '2024', '2023', '2022', '2021', '2020'].map(yr => (
-              <option key={yr} value={yr}>{yr} AQS</option>
-            ))}
-          </select>
-        </div>
-
-        {aqsLoading ? (
-          <div className="space-y-3 py-4 text-center">
-            <div className="flex items-center justify-center gap-2 text-[10px] text-indigo-500 font-bold uppercase tracking-widest">
-              <Loader2 className="h-3 w-3 animate-spin" /> Checking EPA Data for {aqsYear}...
-            </div>
-            <p className="text-[10px] text-slate-400 italic">Queries for {aqsYear} can take up to 20 seconds.</p>
-          </div>
-        ) : filteredSamples.length === 0 ? (
-          <div className="bg-slate-50 rounded-lg p-6 text-center border border-slate-100">
-            <Activity className="h-5 w-5 text-slate-300 mx-auto mb-2" />
-            <p className="text-[10px] text-slate-500">
-              {activeTab === 'toxics'
-                ? "No HAP samples found for this site in the selected year. The EPA may only monitor criteria pollutants here."
-                : "No measurements found for this site in the selected year."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {filteredSamples.slice(0, 30).map((s, i) => {
-              const isCriteria = criteriaParams.includes(s.parameter_code);
-              return (
-                <div key={i} className={`p-2 rounded border flex justify-between items-center text-xs transition-colors hover:border-slate-300 ${isCriteria ? 'bg-blue-50/30 border-blue-100' : 'bg-purple-50/30 border-purple-100'}`}>
-                  <div className="flex-1 min-w-0 pr-2">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isCriteria ? 'bg-blue-400' : 'bg-purple-400'}`}></span>
-                      <span className={`font-bold truncate ${isCriteria ? 'text-blue-900' : 'text-purple-900'}`}>{s.parameter_name}</span>
-                      {!isCriteria && <span className="text-[8px] font-bold px-1 rounded flex-shrink-0 bg-purple-100 text-purple-600">HAP</span>}
-                    </div>
-                    <div className="text-[9px] text-slate-500 font-medium truncate">{s.date_local} · {s.duration_description || s.sample_duration}</div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className={`font-mono font-bold text-sm ${isCriteria ? 'text-blue-700' : 'text-purple-700'}`}>
-                      {typeof s.sample_measurement === 'number' ? s.sample_measurement.toFixed(4) : 'N/A'}
-                    </div>
-                    <div className="text-[8px] text-slate-400 font-bold uppercase">{s.units_of_measure}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Multi-Year Toxics History */}
-      {activeTab === 'toxics' && !aqsLoading && aqsAnnualData.length > 0 && (
-        <div className="mt-8 border-t border-slate-100 pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Multi-Year Toxics Profile</h3>
-            <Clock className="h-3.5 w-3.5 text-slate-300" />
-          </div>
-          <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[9px] font-bold text-slate-400 uppercase border-b border-slate-200">
-                  <th className="pb-2">Year</th><th className="pb-2">Pollutant</th><th className="pb-2 text-right">Avg (µg/m³)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {aqsAnnualData.filter(d => !criteriaParams.includes(d.parameter_code)).slice(0, 15).map((d, i) => (
-                  <tr key={i} className="text-[10px]">
-                    <td className="py-2 text-slate-500 font-medium">{d.year}</td>
-                    <td className="py-2 text-slate-900 font-bold truncate max-w-[100px]">{d.parameter}</td>
-                    <td className="py-2 text-right text-purple-600 font-mono font-bold">{typeof d.arithmetic_mean === 'number' ? d.arithmetic_mean.toFixed(5) : 'N/A'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {aqsAnnualData.filter(d => !criteriaParams.includes(d.parameter_code)).length === 0 && (
-              <p className="text-[10px] text-slate-400 italic text-center py-4">No historical HAP averages recorded for this site.</p>
-            )}
-            <p className="text-[8px] text-slate-300 mt-3 text-center uppercase tracking-tighter italic">Source: EPA AQS Annual Statistics (2014-2024)</p>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'toxics' && !aqsLoading && aqsAnnualData.length === 0 && (
-        <div className="mt-8 border-t border-slate-100 pt-6">
-          <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
-            <h4 className="text-[10px] font-bold text-amber-700 mb-1 flex items-center gap-1.5">
-              <ShieldAlert className="h-3.5 w-3.5" /> Site Lacks Toxics Profile
-            </h4>
-            <p className="text-[10px] text-amber-600 leading-tight">
-              This monitoring station does not have any historical Hazardous Air Pollutant (HAP) records. It may only monitor criteria pollutants like Ozone or Particulate Matter.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <button onClick={() => setSelectedMonitor(null)} className="w-full py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-        Deselect Site
-      </button>
-    </div>
-  );
-}

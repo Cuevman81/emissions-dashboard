@@ -34,3 +34,9 @@ next-env.d.ts
 
 # caches
 src/cache/
+
+# project specific exclusions
+/backups
+/scratch
+/src/logs
+.claude/

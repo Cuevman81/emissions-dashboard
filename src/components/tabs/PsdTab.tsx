@@ -6,6 +6,7 @@ import { Loader2, BarChart3, Database, ShieldAlert } from 'lucide-react';
 import { CamdTooltip } from '@/components/ChartTooltips';
 import StackInventory from '@/components/StackInventory';
 import { PSD_SER, normalizePsdPollutant } from '@/lib/constants';
+import psdBaselinesData from '@/lib/psd_baselines.json';
 import {
   Facility,
   StackParameter,
@@ -46,6 +47,17 @@ export default function PsdTab({
   const [showManualEmissionForm, setShowManualEmissionForm] = useState(false);
   const [isSimulated, setIsSimulated] = useState(false);
   const [localStackData, setLocalStackData] = useState<Record<string, StackParameter[]>>({});
+  
+  const [selectedCounty, setSelectedCounty] = useState<string>('Jackson');
+  
+  const countyName = neiData?.county ? neiData.county.replace(/\s+County$/i, '').trim() : '';
+  const psdBaselines = psdBaselinesData as Record<string, { NO2: string; SO2: string; PM10: string; "PM2.5": string }>;
+
+  useEffect(() => {
+    if (countyName && countyName in psdBaselinesData) {
+      setSelectedCounty(countyName);
+    }
+  }, [countyName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -399,6 +411,66 @@ export default function PsdTab({
           )}
         </div>
       )}
+
+      {/* Minor Source Baseline Dates Tracker */}
+      <div className="border-t border-slate-100 pt-5 mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+            <ShieldAlert className="h-3 w-3" /> Minor Source Baseline Dates
+          </h3>
+          <select
+            value={selectedCounty}
+            onChange={(e) => setSelectedCounty(e.target.value)}
+            aria-label="Select Mississippi county to view PSD baseline dates"
+            className="text-[10px] font-bold px-2 py-1 rounded bg-slate-50 text-slate-700 border border-slate-200 outline-none cursor-pointer focus:ring-1 focus:ring-blue-400"
+          >
+            {Object.keys(psdBaselines).sort().map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        {(() => {
+          const dates = psdBaselines[selectedCounty] || { NO2: 'Not Triggered', SO2: 'Not Triggered', PM10: 'Not Triggered', "PM2.5": 'Not Triggered' };
+          return (
+            <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-4 shadow-sm">
+              <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-slate-200/50">
+                <span className="text-xs font-bold text-slate-700">{selectedCounty} County Baseline</span>
+                <a
+                  href="https://opcgis.deq.state.ms.us/ensearchonline/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[9px] text-blue-600 hover:underline font-bold"
+                >
+                  enSearch Online ↗
+                </a>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 bg-white rounded border border-slate-100 flex flex-col">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase">NO₂ (Nitrogen Dioxide)</span>
+                  <span className={`font-mono font-bold mt-0.5 ${dates.NO2 !== 'Not Triggered' ? 'text-indigo-600' : 'text-slate-400'}`}>{dates.NO2}</span>
+                </div>
+                <div className="p-2 bg-white rounded border border-slate-100 flex flex-col">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase">SO₂ (Sulfur Dioxide)</span>
+                  <span className={`font-mono font-bold mt-0.5 ${dates.SO2 !== 'Not Triggered' ? 'text-indigo-600' : 'text-slate-400'}`}>{dates.SO2}</span>
+                </div>
+                <div className="p-2 bg-white rounded border border-slate-100 flex flex-col">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase">PM₁₀ (Particulate 10µm)</span>
+                  <span className={`font-mono font-bold mt-0.5 ${dates.PM10 !== 'Not Triggered' ? 'text-indigo-600' : 'text-slate-400'}`}>{dates.PM10}</span>
+                </div>
+                <div className="p-2 bg-white rounded border border-slate-100 flex flex-col">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase">PM₂.₅ (Particulate 2.5µm)</span>
+                  <span className={`font-mono font-bold mt-0.5 ${dates["PM2.5"] !== 'Not Triggered' ? 'text-indigo-600' : 'text-slate-400'}`}>{dates["PM2.5"]}</span>
+                </div>
+              </div>
+              <p className="text-[8px] text-slate-400 mt-2.5 leading-relaxed italic">
+                *The minor source baseline date is the earliest date on which MDEQ receives a complete PSD application after the federal trigger date. Actual emissions changes after this date affect the available increment.
+              </p>
+            </div>
+          );
+        })()}
+      </div>
+
 
       <StackInventory
         stacks={stacks}

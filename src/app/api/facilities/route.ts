@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+function jsonResponse(data: any, status = 200) {
+  return NextResponse.json(data, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    }
+  });
+}
+
 const ECHO_BASE = 'https://echodata.epa.gov/echo';
 
 // ECHO air_rest_services field names (from actual API response)
@@ -321,7 +332,7 @@ export async function GET(request: Request) {
         const cachedData = fs.readFileSync(cachePath, 'utf8');
         const facilities = JSON.parse(cachedData);
         attachNei2023Flags(facilities);
-        return NextResponse.json(facilities);
+        return jsonResponse(facilities);
       }
       console.log(`[Cache] Found stale cache for ${state}, attempting refresh...`);
     }
@@ -402,10 +413,10 @@ export async function GET(request: Request) {
        const staleData = fs.readFileSync(cachePath, 'utf8');
        const facilities = JSON.parse(staleData);
        attachNei2023Flags(facilities);
-       return NextResponse.json(facilities);
+       return jsonResponse(facilities);
     }
 
-    return NextResponse.json(facilities);
+    return jsonResponse(facilities);
   } catch (err: any) {
     console.error('Facilities fetch completely failed:', err);
     // Ultimate fallback: return empty or check if cache exists regardless of age
@@ -413,9 +424,8 @@ export async function GET(request: Request) {
        const staleData = fs.readFileSync(cachePath, 'utf8');
        const facilities = JSON.parse(staleData);
        attachNei2023Flags(facilities);
-       return NextResponse.json(facilities);
+       return jsonResponse(facilities);
     }
-    return NextResponse.json([]);
+    return jsonResponse([]);
   }
 }
-

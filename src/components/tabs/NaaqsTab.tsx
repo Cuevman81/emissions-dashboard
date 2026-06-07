@@ -395,7 +395,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
                         <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-                        <Tooltip content={<NaaqsTooltip />} position={{ y: 10 }} />
+                        <Tooltip content={<NaaqsTooltip />} position={{ x: -215, y: 15 }} />
                         <Legend wrapperStyle={{ fontSize: '8px', paddingTop: '10px' }} iconType="circle" height={40} verticalAlign="bottom" />
                         <ReferenceLine
                           y={refNaaqs}

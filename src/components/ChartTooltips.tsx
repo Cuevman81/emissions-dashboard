@@ -1,3 +1,5 @@
+import { shortenChemicalName } from '@/lib/constants';
+
 export const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
@@ -10,7 +12,7 @@ export const CustomTooltip = ({ active, payload, label }: any) => {
             return (
               <div key={index} className="flex flex-col border-b border-slate-800/40 pb-0.5 last:border-0 last:pb-0">
                 <span className="text-[9px] text-slate-400 truncate block max-w-[140px]" title={item.name}>
-                  {item.name}
+                  {shortenChemicalName(item.name)}
                 </span>
                 <span className="font-mono font-bold" style={{ color: item.color || '#e2e8f0' }}>
                   {formattedVal} <span className="font-normal text-[8px] text-slate-500">Tons/Yr</span>

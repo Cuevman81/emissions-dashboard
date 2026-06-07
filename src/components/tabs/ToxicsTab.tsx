@@ -13,6 +13,7 @@ import {
   AqsMonitor,
   getNearestMonitor,
 } from '@/lib/data-service';
+import { shortenChemicalName } from '@/lib/constants';
 
 interface ToxicsTabProps {
   selectedFacility: Facility;
@@ -225,7 +226,7 @@ export default function ToxicsTab({
             {Object.keys(historicalHaps).length > 1 && (
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Historical Release Trend</h3>
-                <div className="h-56 w-full">
+                <div className="h-64 w-full">
                   {isMounted ? (
                     <ResponsiveContainer width="100%" height="100%">
                       {(() => {
@@ -256,7 +257,7 @@ export default function ToxicsTab({
                             <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
                             <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(val) => val < 1 && val > 0 ? '<1' : val} />
                             <Tooltip content={<CustomTooltip />} position={{ x: -175, y: 15 }} />
-                            <Legend wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} iconType="circle" height={36} verticalAlign="bottom" />
+                            <Legend wrapperStyle={{ fontSize: '9px', paddingTop: '10px' }} iconType="circle" height={45} verticalAlign="bottom" formatter={shortenChemicalName} />
                             {linesToRender.map((pollutant, idx) => (
                               <Line
                                 key={pollutant} type="monotone" dataKey={pollutant}

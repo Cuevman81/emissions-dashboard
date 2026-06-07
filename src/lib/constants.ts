@@ -35,3 +35,26 @@ export function normalizePsdPollutant(name: string): string | null {
   if (n.includes('lead') || n === 'pb') return 'Lead';
   return null;
 }
+
+export function shortenChemicalName(name: string): string {
+  if (!name) return '';
+  const n = name.trim();
+  
+  const lower = n.toLowerCase();
+  if (lower.includes('hydrochloric acid')) {
+    if (lower.includes('1995')) return 'Hydrochloric acid (1995+)';
+    if (lower.includes('mists')) return 'Hydrochloric acid (aerosols)';
+    return 'Hydrochloric Acid';
+  }
+  if (lower.includes('sulfuric acid')) {
+    if (lower.includes('1994')) return 'Sulfuric acid (1994+)';
+    if (lower.includes('mists')) return 'Sulfuric acid (aerosols)';
+    return 'Sulfuric Acid';
+  }
+  
+  if (n.length > 45) {
+    return n.substring(0, 42) + '...';
+  }
+  
+  return n;
+}

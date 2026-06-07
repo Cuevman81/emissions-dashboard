@@ -26,7 +26,22 @@ interface EchoFacility {
   [key: string]: string | undefined;
 }
 
-type FacilitySector = 'Power Plant' | 'Refinery' | 'Chemical' | 'Cement' | 'Paper/Pulp' | 'Steel' | 'Other';
+type FacilitySector =
+  | 'Power Plant'
+  | 'Refinery'
+  | 'Chemical'
+  | 'Cement'
+  | 'Paper/Pulp'
+  | 'Steel'
+  | 'Oil & Gas'
+  | 'Wood Products'
+  | 'Metal Fabrication'
+  | 'Plastics/Rubber'
+  | 'Pipeline/Compressor'
+  | 'Food Processing'
+  | 'Transportation Equip'
+  | 'Waste Management'
+  | 'Other';
 
 function deriveSector(camdId: string | null, naics: string | undefined): FacilitySector {
   // CAMPD ORIS code is the definitive indicator of an EGU/power plant
@@ -39,6 +54,17 @@ function deriveSector(camdId: string | null, naics: string | undefined): Facilit
   if (n.startsWith('3273') || n.startsWith('3272')) return 'Cement'; // cement & concrete
   if (n.startsWith('3221') || n.startsWith('3222')) return 'Paper/Pulp'; // paper mills
   if (n.startsWith('3311') || n.startsWith('3312')) return 'Steel'; // iron & steel
+
+  // Prominent sub-sectors from "Other"
+  if (n.startsWith('211')) return 'Oil & Gas';            // oil & gas extraction
+  if (n.startsWith('321')) return 'Wood Products';        // wood products manufacturing
+  if (n.startsWith('332')) return 'Metal Fabrication';    // metal fabrication
+  if (n.startsWith('326')) return 'Plastics/Rubber';      // plastics & rubber manufacturing
+  if (n.startsWith('486')) return 'Pipeline/Compressor';  // pipelines & compressor stations
+  if (n.startsWith('311') || n.startsWith('312')) return 'Food Processing'; // food & beverage
+  if (n.startsWith('336')) return 'Transportation Equip'; // transportation equipment
+  if (n.startsWith('562')) return 'Waste Management';     // waste management & landfills
+
   return 'Other';
 }
 

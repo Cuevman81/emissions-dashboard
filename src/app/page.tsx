@@ -37,7 +37,7 @@ export default function EmissionsDashboard() {
   const [radiusMi, setRadiusMi] = useState(50);
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'camd' | 'tri'>('all');
+  const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'camd' | 'tri' | 'major' | 'synthetic' | 'minor'>('all');
   const [mapTriYear, setMapTriYear] = useState<string>('All');
   const [activeTab, setActiveTab] = useState<ActiveTab>('inventory');
   const [dataSource, setDataSource] = useState<string>('');
@@ -124,6 +124,12 @@ export default function EmissionsDashboard() {
       sourceList = sourceList.filter(f => f.eisId);
     } else if (mapFilter === 'camd') {
       sourceList = sourceList.filter(f => f.camdId);
+    } else if (mapFilter === 'major') {
+      sourceList = sourceList.filter(f => f.permitType === 'Major');
+    } else if (mapFilter === 'synthetic') {
+      sourceList = sourceList.filter(f => f.permitType === 'Synthetic Minor');
+    } else if (mapFilter === 'minor') {
+      sourceList = sourceList.filter(f => f.permitType === 'Federally Reportable Minor' || f.permitType === 'Other');
     }
     if (showAll) return sourceList;
     if (!center) return [];
@@ -139,6 +145,12 @@ export default function EmissionsDashboard() {
       sourceList = sourceList.filter(f => f.eisId);
     } else if (mapFilter === 'camd') {
       sourceList = sourceList.filter(f => f.camdId);
+    } else if (mapFilter === 'major') {
+      sourceList = sourceList.filter(f => f.permitType === 'Major');
+    } else if (mapFilter === 'synthetic') {
+      sourceList = sourceList.filter(f => f.permitType === 'Synthetic Minor');
+    } else if (mapFilter === 'minor') {
+      sourceList = sourceList.filter(f => f.permitType === 'Federally Reportable Minor' || f.permitType === 'Other');
     }
     if (!center) return showAll ? sourceList : [];
     return filterByRadius(sourceList, center[0], center[1], radiusMi);
@@ -379,7 +391,13 @@ export default function EmissionsDashboard() {
                             ? 'bg-purple-600 text-white border-purple-600'
                             : mapFilter === 'camd'
                               ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-amber-600 text-white border-amber-600'
+                              : mapFilter === 'nei'
+                                ? 'bg-violet-600 text-white border-violet-600'
+                                : mapFilter === 'major'
+                                  ? 'bg-red-600 text-white border-red-600'
+                                  : mapFilter === 'synthetic'
+                                    ? 'bg-amber-500 text-white border-amber-500'
+                                    : 'bg-slate-600 text-white border-slate-600'
                       }`}
                     >
                       <option value="all" className="bg-white text-slate-700">Filter: None (Show All)</option>
@@ -390,6 +408,9 @@ export default function EmissionsDashboard() {
                       {(activeTab === 'inventory' || activeTab === 'toxics' || activeTab === 'naaqs') && (
                         <option value="tri" className="bg-white text-slate-700">Filter: TRI (Toxics) Reporters</option>
                       )}
+                      <option value="major" className="bg-white text-slate-700">Filter: Title V Major</option>
+                      <option value="synthetic" className="bg-white text-slate-700">Filter: Synthetic Minor</option>
+                      <option value="minor" className="bg-white text-slate-700">Filter: Minor/Other</option>
                     </select>
                     <button
                       onClick={handleClassIToggle}

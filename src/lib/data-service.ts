@@ -24,6 +24,14 @@ export type FacilitySector =
   | 'Cement'
   | 'Paper/Pulp'
   | 'Steel'
+  | 'Oil & Gas'
+  | 'Wood Products'
+  | 'Metal Fabrication'
+  | 'Plastics/Rubber'
+  | 'Pipeline/Compressor'
+  | 'Food Processing'
+  | 'Transportation Equip'
+  | 'Waste Management'
   | 'Other';
 
 export interface Facility {

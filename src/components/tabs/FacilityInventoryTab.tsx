@@ -11,6 +11,7 @@ interface FacilityInventoryTabProps {
   selectedSector: string | null;
   onSectorSelect: (sector: string | null) => void;
   neiYear: '2020' | '2023';
+  neiSyncStatus?: 'checking' | 'up-to-date' | 'updating' | 'error';
 }
 
 // Static metadata for data sources — latestYear is computed dynamically below
@@ -29,6 +30,7 @@ export default function FacilityInventoryTab({
   selectedSector,
   onSectorSelect,
   neiYear,
+  neiSyncStatus = 'checking',
 }: FacilityInventoryTabProps) {
   const [naaqsLoading, setNaaqsLoading] = useState(true);
   const [designValues, setDesignValues] = useState<NaaqsDesignValue[]>([]);
@@ -153,7 +155,30 @@ export default function FacilityInventoryTab({
                   <span className="text-[10px] font-mono font-bold text-slate-600">{ds.latestYear}</span>
                 )}
                 {ds.key === 'nei' && (
-                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600">Triennial</span>
+                  <>
+                    {neiSyncStatus === 'checking' && (
+                      <span className="text-[9px] font-bold text-slate-400 animate-pulse">Checking...</span>
+                    )}
+                    {neiSyncStatus === 'updating' && (
+                      <span className="text-[9px] font-bold text-violet-600 flex items-center gap-1 bg-violet-50 px-2 py-0.5 rounded-full border border-violet-100">
+                        <Loader2 className="h-2.5 w-2.5 animate-spin text-violet-500" />
+                        Syncing...
+                      </span>
+                    )}
+                    {neiSyncStatus === 'up-to-date' && (
+                      <span className="text-[9px] font-bold text-green-700 flex items-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
+                        <CheckCircle2 className="h-2.5 w-2.5 text-green-600" />
+                        Up to date
+                      </span>
+                    )}
+                    {neiSyncStatus === 'error' && (
+                      <span className="text-[9px] font-bold text-red-700 flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                        <AlertTriangle className="h-2.5 w-2.5 text-red-600" />
+                        Sync error
+                      </span>
+                    )}
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-600">Triennial</span>
+                  </>
                 )}
               </div>
             </div>

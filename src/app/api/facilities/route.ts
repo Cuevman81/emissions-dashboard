@@ -336,9 +336,40 @@ export async function GET(request: Request) {
       console.log(`ECHO Success: ${facilities.length} facilities in ${state}`);
       success = true;
     } catch (err: any) {
-      console.warn(`ECHO Failed: ${err.message}. Using TRI fallback.`);
-      facilities = await fetchTRIFallback(state);
-      if (facilities.length > 0) success = true;
+      console.warn(`ECHO Failed: ${err.message}. Attempting stale cache or seed file fallback.`);
+      
+      // Try loading stale cache from disk if it exists (even if expired)
+      if (fs.existsSync(cachePath)) {
+        try {
+          const staleData = fs.readFileSync(cachePath, 'utf8');
+          facilities = JSON.parse(staleData);
+          console.log(`[Cache Fallback] Loaded ${facilities.length} records from stale cache after ECHO failure.`);
+          success = true;
+        } catch (cacheErr) {
+          console.error('[Cache Fallback] Failed to read stale cache:', cacheErr);
+        }
+      }
+
+      // If no cache file on disk, try the seed file in src/lib
+      if (facilities.length === 0) {
+        const seedPath = path.join(process.cwd(), 'src', 'lib', `facilities_${state}_seed.json`);
+        if (fs.existsSync(seedPath)) {
+          try {
+            const seedData = fs.readFileSync(seedPath, 'utf8');
+            facilities = JSON.parse(seedData);
+            console.log(`[Seed Fallback] Loaded ${facilities.length} records from local seed file after ECHO failure.`);
+            success = true;
+          } catch (seedErr) {
+            console.error('[Seed Fallback] Failed to read seed file:', seedErr);
+          }
+        }
+      }
+
+      // If both are missing/failed, fall back to live TRI query
+      if (facilities.length === 0) {
+        facilities = await fetchTRIFallback(state);
+        if (facilities.length > 0) success = true;
+      }
     }
 
     // 3. Supplement with local CSV facilities

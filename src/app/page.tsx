@@ -152,6 +152,7 @@ export default function EmissionsDashboard() {
     setAllFacilities([]);
     setCenter(null);
     setSelectedFacility(null);
+    setActiveTab('inventory');
     setDataSource('');
     setCountyData(null);
     setClassIGeoJson(null);
@@ -240,20 +241,16 @@ export default function EmissionsDashboard() {
   const handleFacilityClose = (closedFacility: Facility) => {
     if (selectedFacilityIdRef.current === closedFacility.id) {
       setSelectedFacility(null);
+      setActiveTab('inventory');
     }
   };
 
   const handleMonitorClose = (closedMonitor: AqsMonitor) => {
     if (selectedMonitorIdRef.current === closedMonitor.id) {
       setSelectedMonitor(null);
-    }
-  };
-
-  useEffect(() => {
-    if (!selectedFacility && !selectedMonitor && (activeTab === 'psd' || activeTab === 'toxics')) {
       setActiveTab('inventory');
     }
-  }, [selectedFacility, selectedMonitor, activeTab]);
+  };
 
   const handleExport = async () => {
     if (proximityFacilities.length === 0) return;
@@ -458,7 +455,7 @@ export default function EmissionsDashboard() {
                     <MapPin className="h-4 w-4 text-blue-500" />
                     Facility Proximity Map ({allFacilities.length} total)
                     {center && (
-                      <button onClick={() => { setCenter(null); setSelectedFacility(null); }} className="ml-2 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 px-2 py-0.5 rounded text-[10px] transition-colors">
+                      <button onClick={() => { setCenter(null); setSelectedFacility(null); setActiveTab('inventory'); }} className="ml-2 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 px-2 py-0.5 rounded text-[10px] transition-colors">
                         ✕ Clear map pin
                       </button>
                     )}
@@ -757,7 +754,7 @@ export default function EmissionsDashboard() {
                         </button>
                       </div>
 
-                      <button onClick={() => setSelectedMonitor(null)} className="w-full py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      <button onClick={() => { setSelectedMonitor(null); setActiveTab('inventory'); }} className="w-full py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                         Deselect Site
                       </button>
                     </div>
@@ -799,7 +796,7 @@ export default function EmissionsDashboard() {
                           neiYear={neiYear} setNeiYear={setNeiYear}
                         />
                       )}
-                      <button onClick={() => setSelectedFacility(null)} className="w-full py-2 mt-4 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+                      <button onClick={() => { setSelectedFacility(null); setActiveTab('inventory'); }} className="w-full py-2 mt-4 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                         Close Details
                       </button>
                     </div>

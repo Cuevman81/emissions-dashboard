@@ -354,6 +354,66 @@ export async function fetchAqsAnnualData(monitorId: string): Promise<any[]> {
 /**
  * Helper to find the nearest AQS monitor to a given point
  */
+// ─── NAAQS Design Value types ─────────────────────────────────────────────
+
+export interface NaaqsDesignValue {
+  siteId: string;
+  siteName: string;
+  county: string;
+  lat: number;
+  lon: number;
+  pollutant: string;
+  metric: string;
+  designValue: number;
+  naaqs: number;
+  units: string;
+  status: 'Attainment' | 'Exceedance';
+  years: number[];
+}
+
+export interface NaaqsCompleteness {
+  siteId: string;
+  siteName: string;
+  pollutant: string;
+  year: number;
+  quarter: number;
+  observationPct: number;
+  sufficient: boolean;
+}
+
+export interface NaaqsTrend {
+  siteId: string;
+  siteName: string;
+  pollutant: string;
+  metric: string;
+  year: number;
+  value: number;
+  naaqs: number;
+  units: string;
+}
+
+export interface NaaqsResult {
+  designValues: NaaqsDesignValue[];
+  trends: NaaqsTrend[];
+  completeness: NaaqsCompleteness[];
+  state: string;
+  endYear: number;
+}
+
+/**
+ * Fetch NAAQS design values for a state
+ */
+export async function fetchNaaqsDesignValues(state: string, endYear: number = 2024): Promise<NaaqsResult> {
+  try {
+    const res = await fetch(`/api/naaqs?state=${state}&endYear=${endYear}`);
+    if (!res.ok) return { designValues: [], trends: [], completeness: [], state, endYear };
+    return await res.json();
+  } catch (err) {
+    console.error('NAAQS fetch error:', err);
+    return { designValues: [], trends: [], completeness: [], state, endYear };
+  }
+}
+
 export function getNearestMonitor(lat: number, lon: number, monitors: AqsMonitor[]): { monitor: AqsMonitor; distance: number } | null {
   if (!monitors || monitors.length === 0) return null;
   const center = turf.point([lon, lat]);

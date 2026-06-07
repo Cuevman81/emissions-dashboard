@@ -20,8 +20,9 @@ interface EchoFacility {
   TRIIDs?: string;
   CamdIDs?: string;       // ORIS plant code — non-null means EGU with CEMS data in CAMPD
   EisIDs?: string;        // NEI/EIS facility ID
-  FacNaics?: string;      // Primary NAICS code
-  FacPrimaryNaicsCode?: string; // alternate field name used by some ECHO responses
+  AIRNAICS?: string;      // Primary NAICS code (air program NAICS from ECHO)
+  FacNaics?: string;      // Alternate NAICS field (some ECHO response shapes)
+  FacPrimaryNaicsCode?: string; // Alternate NAICS field
   [key: string]: string | undefined;
 }
 
@@ -77,7 +78,7 @@ function parseEchoFacilities(raw: EchoFacility[], state: string) {
       const eisId = f.EisIDs && f.EisIDs !== 'null' && f.EisIDs !== 'None'
         ? f.EisIDs.split(',')[0].trim() : null;
 
-      const naics = f.FacNaics || f.FacPrimaryNaicsCode || '';
+      const naics = f.AIRNAICS || f.FacNaics || f.FacPrimaryNaicsCode || '';
       const sector = deriveSector(camdId, naics);
 
       return {

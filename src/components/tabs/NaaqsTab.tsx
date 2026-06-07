@@ -1,0 +1,317 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts';
+import { Loader2, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
+import { fetchNaaqsDesignValues, NaaqsDesignValue, NaaqsTrend, NaaqsCompleteness } from '@/lib/data-service';
+
+const POLLUTANT_ORDER = ['O3', 'PM2.5', 'PM10', 'NO2', 'SO2', 'CO'];
+const POLLUTANT_COLORS: Record<string, string> = {
+  'O3': '#10b981', 'PM2.5': '#8b5cf6', 'PM10': '#f59e0b',
+  'NO2': '#ef4444', 'SO2': '#3b82f6', 'CO': '#64748b',
+};
+
+interface NaaqsTabProps {
+  selectedState: string;
+  isMounted: boolean;
+}
+
+export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
+  const [designValues, setDesignValues] = useState<NaaqsDesignValue[]>([]);
+  const [trends, setTrends] = useState<NaaqsTrend[]>([]);
+  const [completeness, setCompleteness] = useState<NaaqsCompleteness[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [endYear, setEndYear] = useState(2024);
+  const [pollutantFilter, setPollutantFilter] = useState<string>('All');
+  const [showCompleteness, setShowCompleteness] = useState(false);
+  const [showTrends, setShowTrends] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchNaaqsDesignValues(selectedState, endYear).then(result => {
+      if (cancelled) return;
+      setDesignValues(result.designValues);
+      setTrends(result.trends);
+      setCompleteness(result.completeness);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [selectedState, endYear]);
+
+  const filteredDvs = useMemo(() => {
+    if (pollutantFilter === 'All') return designValues;
+    return designValues.filter(dv => dv.pollutant === pollutantFilter);
+  }, [designValues, pollutantFilter]);
+
+  const activePollutants = useMemo(() => {
+    const set = new Set(designValues.map(dv => dv.pollutant));
+    return POLLUTANT_ORDER.filter(p => set.has(p));
+  }, [designValues]);
+
+  const trendsByPollutant = useMemo(() => {
+    const map: Record<string, NaaqsTrend[]> = {};
+    const pollutants = pollutantFilter === 'All' ? activePollutants : [pollutantFilter];
+    for (const p of pollutants) {
+      map[p] = trends.filter(t => t.pollutant === p);
+    }
+    return map;
+  }, [trends, pollutantFilter, activePollutants]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mb-3" />
+        <p className="text-sm text-slate-500 font-medium">Loading NAAQS Design Values...</p>
+        <p className="text-[10px] text-slate-400 mt-1">Querying EPA AQS for {selectedState} ({endYear - 9}–{endYear})</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">NAAQS Design Values</h3>
+          <div className="flex items-center gap-2">
+            <select
+              value={pollutantFilter}
+              onChange={e => setPollutantFilter(e.target.value)}
+              className="text-[10px] font-bold px-2 py-1 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 outline-none cursor-pointer"
+            >
+              <option value="All">All Pollutants</option>
+              {activePollutants.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            <select
+              value={endYear}
+              onChange={e => setEndYear(parseInt(e.target.value))}
+              className="text-[10px] font-bold px-2 py-1 rounded bg-slate-50 text-slate-700 border border-slate-200 outline-none cursor-pointer"
+            >
+              {[2024, 2023, 2022, 2021, 2020].map(yr => (
+                <option key={yr} value={yr}>{yr}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <p className="text-[9px] text-slate-400 leading-relaxed">
+          Official EPA design values from the Air Quality Design Values report. Source: EPA ArcGIS FeatureServer.
+        </p>
+      </div>
+
+      {/* Summary badges */}
+      <div className="flex flex-wrap gap-2">
+        {activePollutants.map(p => {
+          const dvs = designValues.filter(dv => dv.pollutant === p);
+          const exceedances = dvs.filter(dv => dv.status === 'Exceedance').length;
+          return (
+            <button
+              key={p}
+              onClick={() => setPollutantFilter(pollutantFilter === p ? 'All' : p)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                pollutantFilter === p ? 'ring-2 ring-offset-1' : ''
+              } ${exceedances > 0
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : 'bg-green-50 text-green-700 border-green-200'
+              }`}
+              style={pollutantFilter === p ? { outlineColor: POLLUTANT_COLORS[p] } : {}}
+            >
+              {p}: {dvs.length} sites {exceedances > 0 && `(${exceedances} exceed)`}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Design Value Table */}
+      {filteredDvs.length === 0 ? (
+        <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+          <ShieldAlert className="h-5 w-5 text-slate-300 mx-auto mb-2" />
+          <p className="text-[10px] text-slate-400">No design values available for this selection.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full text-[10px]">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-3 py-2 text-left font-bold text-slate-500">Pollutant</th>
+                <th className="px-3 py-2 text-left font-bold text-slate-500">Site</th>
+                <th className="px-3 py-2 text-left font-bold text-slate-500">County</th>
+                <th className="px-3 py-2 text-left font-bold text-slate-500">Metric</th>
+                <th className="px-3 py-2 text-right font-bold text-slate-500">DV</th>
+                <th className="px-3 py-2 text-right font-bold text-slate-500">NAAQS</th>
+                <th className="px-3 py-2 text-center font-bold text-slate-500">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredDvs
+                .sort((a, b) => POLLUTANT_ORDER.indexOf(a.pollutant) - POLLUTANT_ORDER.indexOf(b.pollutant) || a.siteName.localeCompare(b.siteName))
+                .map((dv, i) => (
+                  <tr key={i} className={dv.status === 'Exceedance' ? 'bg-red-50/50' : 'hover:bg-slate-50'}>
+                    <td className="px-3 py-2 font-bold" style={{ color: POLLUTANT_COLORS[dv.pollutant] }}>{dv.pollutant}</td>
+                    <td className="px-3 py-2 text-slate-700 truncate max-w-[120px]" title={dv.siteName}>{dv.siteName}</td>
+                    <td className="px-3 py-2 text-slate-500">{dv.county}</td>
+                    <td className="px-3 py-2 text-slate-500">{dv.metric}</td>
+                    <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">
+                      {dv.units === 'ppm' ? dv.designValue.toFixed(3) : dv.designValue.toFixed(1)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-400">
+                      {dv.units === 'ppm' ? dv.naaqs.toFixed(3) : dv.naaqs} {dv.units}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`text-[8px] font-bold px-2 py-0.5 rounded-full ${
+                        dv.status === 'Exceedance' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                      }`}>
+                        {dv.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Data Completeness */}
+      <div className="border-t border-slate-100 pt-4">
+        <button
+          onClick={() => setShowCompleteness(!showCompleteness)}
+          className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-700 transition-colors"
+        >
+          {showCompleteness ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          Data Completeness ({completeness.length} records)
+        </button>
+        {showCompleteness && completeness.length > 0 && (
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full text-[9px]">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-2 py-1.5 text-left font-bold text-slate-500">Site</th>
+                  <th className="px-2 py-1.5 text-left font-bold text-slate-500">Pollutant</th>
+                  <th className="px-2 py-1.5 text-center font-bold text-slate-500">Year</th>
+                  <th className="px-2 py-1.5 text-center font-bold text-slate-500">Q</th>
+                  <th className="px-2 py-1.5 text-right font-bold text-slate-500">Obs %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {completeness.slice(0, 100).map((c, i) => (
+                  <tr key={i} className={!c.sufficient ? 'bg-amber-50/50' : ''}>
+                    <td className="px-2 py-1 text-slate-600 truncate max-w-[100px]">{c.siteName}</td>
+                    <td className="px-2 py-1 text-slate-500">{c.pollutant}</td>
+                    <td className="px-2 py-1 text-center text-slate-500">{c.year}</td>
+                    <td className="px-2 py-1 text-center text-slate-500">Q{c.quarter}</td>
+                    <td className="px-2 py-1 text-right font-mono">
+                      <span className={`font-bold ${c.sufficient ? 'text-green-600' : 'text-amber-600'}`}>
+                        {c.observationPct.toFixed(0)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {completeness.length > 100 && (
+              <p className="text-[8px] text-slate-400 text-center py-2">Showing first 100 of {completeness.length} records</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 10-Year Trend Charts */}
+      <div className="border-t border-slate-100 pt-4">
+        <button
+          onClick={() => setShowTrends(!showTrends)}
+          className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider hover:text-slate-700 transition-colors"
+        >
+          {showTrends ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          10-Year Trend Charts
+        </button>
+        {showTrends && isMounted && (
+          <div className="mt-3 space-y-6">
+            {Object.entries(trendsByPollutant).map(([pollutant, pollTrends]) => {
+              if (pollTrends.length === 0) return null;
+
+              // Get unique metrics for this pollutant (e.g., "Annual Mean", "24-hr 98th Pctl")
+              const metrics = [...new Set(pollTrends.map(t => t.metric))];
+              const naaqs = pollTrends[0].naaqs;
+              const units = pollTrends[0].units;
+
+              // Pick the primary metric (first one, usually the most relevant)
+              const primaryMetric = metrics[0];
+              const metricTrends = pollTrends.filter(t => t.metric === primaryMetric);
+
+              // Build chart data: one point per year, columns per site
+              const sites = [...new Set(metricTrends.map(t => t.siteId))];
+              const siteNames: Record<string, string> = {};
+              metricTrends.forEach(t => { siteNames[t.siteId] = t.siteName; });
+
+              const years = [...new Set(metricTrends.map(t => t.year))].sort();
+              const chartData = years.map(yr => {
+                const point: any = { year: yr };
+                sites.forEach(sid => {
+                  const match = metricTrends.find(t => t.siteId === sid && t.year === yr);
+                  if (match) point[siteNames[sid] || sid] = match.value;
+                });
+                return point;
+              });
+
+              const siteLabels = sites.map(s => siteNames[s] || s);
+              const lineColors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#64748b', '#ec4899', '#06b6d4'];
+
+              // Get NAAQS for reference line from the primary metric
+              const refNaaqs = designValues.find(dv => dv.pollutant === pollutant)?.naaqs ?? naaqs;
+
+              return (
+                <div key={pollutant} className="bg-white rounded-lg border border-slate-200 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider" style={{ color: POLLUTANT_COLORS[pollutant] }}>
+                      {pollutant} — {primaryMetric}
+                    </h4>
+                    <span className="text-[9px] text-slate-400">{units}</span>
+                  </div>
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                        <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{ fontSize: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                          labelStyle={{ fontWeight: 'bold' }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '8px' }} iconType="circle" />
+                        <ReferenceLine
+                          y={refNaaqs}
+                          stroke="#ef4444"
+                          strokeDasharray="6 3"
+                          strokeWidth={1.5}
+                          label={{ value: `NAAQS: ${refNaaqs}`, position: 'right', fontSize: 8, fill: '#ef4444' }}
+                        />
+                        {siteLabels.slice(0, 8).map((label, idx) => (
+                          <Line
+                            key={label}
+                            type="monotone"
+                            dataKey={label}
+                            stroke={lineColors[idx % lineColors.length]}
+                            strokeWidth={1.5}
+                            dot={{ r: 2.5, strokeWidth: 1 }}
+                            activeDot={{ r: 4, strokeWidth: 0 }}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <p className="text-[8px] text-slate-300 text-center mt-4">
+        Source: EPA Air Quality Design Values Report · ArcGIS FeatureServer · {selectedState} {endYear}
+      </p>
+    </div>
+  );
+}

@@ -130,12 +130,16 @@ function parseEchoFacilities(raw: EchoFacility[], state: string) {
     .filter((f): f is NonNullable<typeof f> => f !== null);
 }
 
-const CACHE_DIR = path.join(process.cwd(), 'src', 'cache');
+const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 // Ensure cache directory exists
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Cache] Failed to ensure cache directory exists:', err);
 }
 
 async function fetchFromECHO(state: string) {
@@ -357,7 +361,11 @@ export async function GET(request: Request) {
     // 5. Save to cache if we got anything useful
     if (success && facilities.length > 0) {
        console.log(`[Cache] Saving ${facilities.length} records to ${state} facility cache.`);
-       fs.writeFileSync(cachePath, JSON.stringify(facilities), 'utf8');
+       try {
+         fs.writeFileSync(cachePath, JSON.stringify(facilities), 'utf8');
+       } catch (cacheErr) {
+         console.warn('[Cache] Failed to write facilities cache:', cacheErr);
+       }
     } else if (fs.existsSync(cachePath)) {
        console.warn(`[Cache] Falling back to stale cache due to EPA failure.`);
        const staleData = fs.readFileSync(cachePath, 'utf8');

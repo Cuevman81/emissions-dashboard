@@ -67,11 +67,15 @@ function getLocalTriEmissions(triId: string, requestedYear: string | null) {
   return null;
 }
 
-const CACHE_DIR = path.join(process.cwd(), 'src', 'cache');
+const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Cache] Failed to ensure cache directory exists:', err);
 }
 
 export async function GET(request: Request) {

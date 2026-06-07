@@ -14,13 +14,17 @@ const STATE_CODE_MAP: Record<string, string> = {
   SD: '46', TN: '47', TX: '48', UT: '49', VT: '50', VA: '51', WA: '53', WV: '54',
 };
 
-const CACHE_DIR = path.join(process.cwd(), 'src', 'cache');
+const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const AQS_DATA_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Ensure cache directory exists
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Cache] Failed to ensure cache directory exists:', err);
 }
 
 export async function GET(request: Request) {

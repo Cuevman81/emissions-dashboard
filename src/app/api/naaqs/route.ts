@@ -3,11 +3,15 @@ import fs from 'fs';
 import path from 'path';
 
 const ARCGIS_BASE = 'https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/Air_Quality_Design_Values_for_Criteria_Pollutants/FeatureServer';
-const CACHE_DIR = path.join(process.cwd(), 'src', 'cache');
+const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Cache] Failed to ensure cache directory exists:', err);
 }
 
 const STATE_NAMES: Record<string, string> = {

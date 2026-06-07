@@ -3,12 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import { syncYearFromEPA } from '@/lib/sync-tri';
 
-const CACHE_DIR = path.join(process.cwd(), 'src', 'cache');
+const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const STATUS_FILE = path.join(CACHE_DIR, 'last_checked_tri.json');
 const CHECK_INTERVAL = 24 * 60 * 60 * 1000; // Check once every 24 hours
 
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Cache] Failed to ensure cache directory exists:', err);
 }
 
 export async function GET() {

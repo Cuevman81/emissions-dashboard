@@ -8,11 +8,15 @@ import csvParser from 'csv-parser';
 const ZIP_URL = 'https://gaftp.epa.gov/Air/nei/2023/data_summaries/eis_report_37583_2023NEI_facility_summary.zip';
 const METADATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_metadata.json');
 const DATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_MS.json');
-const SCRATCH_DIR = path.join(process.cwd(), 'scratch');
+const SCRATCH_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'scratch');
 const TEMP_ZIP = path.join(SCRATCH_DIR, 'nei_2023_temp.zip');
 
-if (!fs.existsSync(SCRATCH_DIR)) {
-  fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(SCRATCH_DIR)) {
+    fs.mkdirSync(SCRATCH_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Sync NEI] Failed to ensure scratch directory exists:', err);
 }
 
 export async function GET(request: Request) {

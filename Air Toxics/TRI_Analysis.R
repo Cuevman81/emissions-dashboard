@@ -14,6 +14,33 @@ library(leaflet)      # For interactive mapping
 # Assuming TRI_2_23_2026 is already loaded in your environment from read_csv()
 
 # -------------------------------------------------------------------------
+# Check for EPA TRI Updates
+# -------------------------------------------------------------------------
+if (exists("TRI_2_23_2026")) {
+  latest_local_year <- max(TRI_2_23_2026$REP_YEAR, na.rm = TRUE)
+  next_year <- latest_local_year + 1
+  check_url <- paste0("https://data.epa.gov/efservice/TRI_REPORTING_FORM/REPORTING_YEAR/equals/", next_year, "/join/TRI_FACILITY/state_abbr/MS/rows/1:1/JSON")
+  
+  message(paste0("Checking EPA API for new TRI data (Year ", next_year, ")..."))
+  tryCatch({
+    con <- url(check_url)
+    res <- readLines(con, warn = FALSE)
+    close(con)
+    if (nchar(res) > 2) {
+      message("\n*** [UPDATE ALERT] ***")
+      message(paste0("A new year of EPA TRI data (", next_year, ") is available for Mississippi!"))
+      message("You can download the new CSV file from the EPA Envirofacts site.")
+      message("**********************\n")
+    } else {
+      message(paste0("[INFO] TRI data is up-to-date. (Latest year in your dataset: ", latest_local_year, ").\n"))
+    }
+  }, error = function(e) {
+    message(paste0("Failed to check for TRI updates: ", e$message, "\n"))
+  })
+}
+
+
+# -------------------------------------------------------------------------
 # 2. Data Cleaning & Preparation
 # -------------------------------------------------------------------------
 

@@ -479,7 +479,7 @@ export default function EmissionsDashboard() {
                               {typeof f.distance === 'number' ? `${f.distance.toFixed(1)} mi` : '—'}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <button onClick={() => handleFacilityClick(f)} className="text-[10px] font-bold uppercase tracking-tighter bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50">
+                              <button onClick={() => handleFacilityClick(f)} className="text-[10px] text-slate-700 font-bold uppercase tracking-tighter bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 hover:text-slate-900 hover:border-slate-300 transition-colors">
                                 View Details
                               </button>
                             </td>

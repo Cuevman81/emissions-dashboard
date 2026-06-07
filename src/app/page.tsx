@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { FeatureCollection } from 'geojson';
 import {
@@ -33,9 +33,29 @@ export default function EmissionsDashboard() {
   const [isMounted, setIsMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedState, setSelectedState] = useState('MS');
+  const selectedStateRef = useRef(selectedState);
+  useEffect(() => {
+    selectedStateRef.current = selectedState;
+  }, [selectedState]);
+
   const [center, setCenter] = useState<[number, number] | null>(null);
   const [radiusMi, setRadiusMi] = useState(50);
-  const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
+  
+  const [selectedFacility, setSelectedFacilityState] = useState<Facility | null>(null);
+  const selectedFacilityIdRef = useRef<string | null>(null);
+
+  const setSelectedFacility = (f: Facility | null | ((curr: Facility | null) => Facility | null)) => {
+    if (typeof f === 'function') {
+      setSelectedFacilityState(curr => {
+        const next = f(curr);
+        selectedFacilityIdRef.current = next?.id || null;
+        return next;
+      });
+    } else {
+      selectedFacilityIdRef.current = f?.id || null;
+      setSelectedFacilityState(f);
+    }
+  };
   const [showAll, setShowAll] = useState(false);
   const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'nei2023' | 'camd' | 'tri' | 'major' | 'synthetic' | 'minor'>('all');
   const [mapTriYear, setMapTriYear] = useState<string>('All');
@@ -61,7 +81,22 @@ export default function EmissionsDashboard() {
   // AQS Monitoring
   const [aqsMonitors, setAqsMonitors] = useState<AqsMonitor[]>([]);
   const [showAqsMonitors, setShowAqsMonitors] = useState(false);
-  const [selectedMonitor, setSelectedMonitor] = useState<AqsMonitor | null>(null);
+  
+  const [selectedMonitor, setSelectedMonitorState] = useState<AqsMonitor | null>(null);
+  const selectedMonitorIdRef = useRef<string | null>(null);
+
+  const setSelectedMonitor = (m: AqsMonitor | null | ((curr: AqsMonitor | null) => AqsMonitor | null)) => {
+    if (typeof m === 'function') {
+      setSelectedMonitorState(curr => {
+        const next = m(curr);
+        selectedMonitorIdRef.current = next?.id || null;
+        return next;
+      });
+    } else {
+      selectedMonitorIdRef.current = m?.id || null;
+      setSelectedMonitorState(m);
+    }
+  };
   const [aqsLoading, setAqsLoading] = useState(false);
   const [aqsError, setAqsError] = useState<string | null>(null);
   const [hasRefreshedSession, setHasRefreshedSession] = useState(false);
@@ -74,7 +109,7 @@ export default function EmissionsDashboard() {
       if (data.success) {
         setNeiSyncStatus('up-to-date');
         // Reload facilities list for current state to reflect any new associations
-        const facRes = await fetch(`/api/facilities?state=${selectedState}`);
+        const facRes = await fetch(`/api/facilities?state=${selectedStateRef.current}`);
         if (facRes.ok) {
           const facData = await facRes.json();
           setAllFacilities(facData);
@@ -95,7 +130,8 @@ export default function EmissionsDashboard() {
       .then(data => console.log('[Sync TRI] Initial check completed:', data))
       .catch(err => console.error('[Sync TRI] Failed to trigger sync check:', err));
 
-    fetch('/api/sync-nei?checkOnly=true')
+    // Abort signal with a 3-second timeout for the GAFTP update check
+    fetch('/api/sync-nei?checkOnly=true', { signal: AbortSignal.timeout(3000) })
       .then(res => res.json())
       .then(data => {
         console.log('[Sync NEI] Status check:', data);
@@ -106,8 +142,8 @@ export default function EmissionsDashboard() {
         }
       })
       .catch(err => {
-        console.error('[Sync NEI] Update check failed:', err);
-        setNeiSyncStatus('error');
+        console.warn('[Sync NEI] Update check timed out or failed, falling back to up-to-date:', err);
+        setNeiSyncStatus('up-to-date');
       });
   }, []);
 
@@ -158,7 +194,7 @@ export default function EmissionsDashboard() {
     }
   }, [activeTab, mapFilter]);
 
-  const nearbyFacilities = useMemo(() => {
+  const filteredFacilities = useMemo(() => {
     let sourceList = allFacilities;
     if (mapFilter === 'tri') {
       sourceList = sourceList.filter(f => f.triId);
@@ -180,38 +216,19 @@ export default function EmissionsDashboard() {
     if (selectedSector) {
       sourceList = sourceList.filter(f => f.sector === selectedSector);
     }
+    return sourceList;
+  }, [allFacilities, mapFilter, mapTriYear, selectedSector]);
 
-    if (showAll) return sourceList;
+  const nearbyFacilities = useMemo(() => {
+    if (showAll) return filteredFacilities;
     if (!center) return [];
-    return filterByRadius(sourceList, center[0], center[1], radiusMi);
-  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear, selectedSector]);
+    return filterByRadius(filteredFacilities, center[0], center[1], radiusMi);
+  }, [filteredFacilities, center, radiusMi, showAll]);
 
   const proximityFacilities = useMemo(() => {
-    let sourceList = allFacilities;
-    if (mapFilter === 'tri') {
-      sourceList = sourceList.filter(f => f.triId);
-      if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
-    } else if (mapFilter === 'nei') {
-      sourceList = sourceList.filter(f => f.eisId);
-    } else if (mapFilter === 'nei2023') {
-      sourceList = sourceList.filter(f => f.hasNei2023);
-    } else if (mapFilter === 'camd') {
-      sourceList = sourceList.filter(f => f.camdId);
-    } else if (mapFilter === 'major') {
-      sourceList = sourceList.filter(f => f.permitType === 'Major');
-    } else if (mapFilter === 'synthetic') {
-      sourceList = sourceList.filter(f => f.permitType === 'Synthetic Minor');
-    } else if (mapFilter === 'minor') {
-      sourceList = sourceList.filter(f => f.permitType === 'Federally Reportable Minor' || f.permitType === 'Other');
-    }
-
-    if (selectedSector) {
-      sourceList = sourceList.filter(f => f.sector === selectedSector);
-    }
-
-    if (!center) return showAll ? sourceList : [];
-    return filterByRadius(sourceList, center[0], center[1], radiusMi);
-  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear, selectedSector]);
+    if (!center) return showAll ? filteredFacilities : [];
+    return filterByRadius(filteredFacilities, center[0], center[1], radiusMi);
+  }, [filteredFacilities, center, radiusMi, showAll]);
 
   const handleFacilityClick = (f: Facility) => {
     setSelectedFacility(f);
@@ -221,25 +238,15 @@ export default function EmissionsDashboard() {
   };
 
   const handleFacilityClose = (closedFacility: Facility) => {
-    setTimeout(() => {
-      setSelectedFacility(current => {
-        if (current && current.id === closedFacility.id) {
-          return null;
-        }
-        return current;
-      });
-    }, 50);
+    if (selectedFacilityIdRef.current === closedFacility.id) {
+      setSelectedFacility(null);
+    }
   };
 
   const handleMonitorClose = (closedMonitor: AqsMonitor) => {
-    setTimeout(() => {
-      setSelectedMonitor(current => {
-        if (current && current.id === closedMonitor.id) {
-          return null;
-        }
-        return current;
-      });
-    }, 50);
+    if (selectedMonitorIdRef.current === closedMonitor.id) {
+      setSelectedMonitor(null);
+    }
   };
 
   useEffect(() => {

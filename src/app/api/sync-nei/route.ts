@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import https from 'https';
+import csvParser from 'csv-parser';
 
 const ZIP_URL = 'https://gaftp.epa.gov/Air/nei/2023/data_summaries/eis_report_37583_2023NEI_facility_summary.zip';
 const METADATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_metadata.json');
@@ -123,12 +124,11 @@ function downloadFile(url: string, dest: string): Promise<void> {
 
 function parseAndFilterNeiZip(zipPath: string, destJsonPath: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    const csv = require('csv-parser');
     const unzipProcess = spawn('unzip', ['-p', zipPath, 'emis_sum_fac_37583.csv']);
     const facilities: Record<string, any> = {};
 
     unzipProcess.stdout
-      .pipe(csv())
+      .pipe(csvParser())
       .on('data', (row: any) => {
         const state = (row['state'] || '').trim().toUpperCase();
         if (state !== 'MS') return;

@@ -71,7 +71,7 @@ export default function FacilityInventoryTab({
     fetchNaaqsDesignValues(selectedState).then(result => {
       if (cancelled) return;
       setDesignValues(result.designValues);
-      setAqsYear(result.endYear);
+      setAqsYear(result.latestYear || result.endYear);
       setNaaqsLoading(false);
     });
     return () => { cancelled = true; };

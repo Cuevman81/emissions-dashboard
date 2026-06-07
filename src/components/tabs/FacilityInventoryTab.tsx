@@ -34,6 +34,7 @@ export default function FacilityInventoryTab({
 }: FacilityInventoryTabProps) {
   const [naaqsLoading, setNaaqsLoading] = useState(true);
   const [designValues, setDesignValues] = useState<NaaqsDesignValue[]>([]);
+  const [aqsYear, setAqsYear] = useState<number>(2024);
 
   // ── Dynamic Data Freshness Years ────────────────────────────
   // Derive latest available years from actual loaded data rather than hardcoding
@@ -46,8 +47,8 @@ export default function FacilityInventoryTab({
     const currentYear = new Date().getFullYear();
     const latestCamd = String(currentYear - 1);
 
-    // AQS / ArcGIS: EPA publishes certified DVs; latest available is typically current year - 1
-    const latestAqs = String(currentYear - 1);
+    // AQS / ArcGIS: EPA publishes certified DVs
+    const latestAqs = String(aqsYear);
 
     // NEI: triennial — last published is 2023
     const latestNei = '2023';
@@ -61,15 +62,16 @@ export default function FacilityInventoryTab({
     };
 
     return DATA_SOURCE_META.map(ds => ({ ...ds, latestYear: yearMap[ds.key] }));
-  }, [allFacilities]);
+  }, [allFacilities, aqsYear]);
 
   // Fetch NAAQS data for attainment snapshot
   useEffect(() => {
     let cancelled = false;
     setNaaqsLoading(true);
-    fetchNaaqsDesignValues(selectedState, 2024).then(result => {
+    fetchNaaqsDesignValues(selectedState).then(result => {
       if (cancelled) return;
       setDesignValues(result.designValues);
+      setAqsYear(result.endYear);
       setNaaqsLoading(false);
     });
     return () => { cancelled = true; };
@@ -371,7 +373,7 @@ export default function FacilityInventoryTab({
           </div>
         )}
         <p className="text-[8px] text-slate-300 mt-2 text-center italic">
-          Based on EPA ArcGIS certified design values (2022-2024)
+          Based on EPA ArcGIS certified design values ({aqsYear - 2}-{aqsYear})
         </p>
       </div>
 

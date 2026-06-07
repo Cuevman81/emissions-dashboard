@@ -22,7 +22,8 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
   const [trends, setTrends] = useState<NaaqsTrend[]>([]);
   const [completeness, setCompleteness] = useState<NaaqsCompleteness[]>([]);
   const [loading, setLoading] = useState(true);
-  const [endYear, setEndYear] = useState(2024);
+  const [endYear, setEndYear] = useState<number | undefined>(undefined);
+  const [latestYear, setLatestYear] = useState<number>(2024);
   const [pollutantFilter, setPollutantFilter] = useState<string>('All');
   const [showCompleteness, setShowCompleteness] = useState(false);
   const [showTrends, setShowTrends] = useState(true);
@@ -35,10 +36,19 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       setDesignValues(result.designValues);
       setTrends(result.trends);
       setCompleteness(result.completeness);
+      setLatestYear(result.latestYear || result.endYear || 2024);
       setLoading(false);
     });
     return () => { cancelled = true; };
   }, [selectedState, endYear]);
+
+  const yearsList = useMemo(() => {
+    const years = [];
+    for (let y = latestYear; y >= 2020; y--) {
+      years.push(y);
+    }
+    return years;
+  }, [latestYear]);
 
   // Helper: exclude Jackson NCORE from NO2 data (Pascagoula is the only relevant NO2 site for MS)
   const isNcoreNO2 = (pollutant: string, siteName: string) =>
@@ -103,7 +113,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       <div className="flex flex-col items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-500 mb-3" />
         <p className="text-sm text-slate-500 font-medium">Loading NAAQS Design Values...</p>
-        <p className="text-[10px] text-slate-400 mt-1">Querying EPA for {selectedState} ({endYear})</p>
+        <p className="text-[10px] text-slate-400 mt-1">Querying EPA for {selectedState} ({endYear || latestYear || 'Latest'})</p>
       </div>
     );
   }
@@ -129,11 +139,11 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
               ))}
             </select>
             <select
-              value={endYear}
+              value={endYear || latestYear}
               onChange={e => setEndYear(parseInt(e.target.value))}
               className="text-[10px] font-bold px-2 py-1 rounded bg-slate-50 text-slate-700 border border-slate-200 outline-none cursor-pointer"
             >
-              {[2024, 2023, 2022, 2021, 2020].map(yr => (
+              {yearsList.map(yr => (
                 <option key={yr} value={yr}>{yr}</option>
               ))}
             </select>
@@ -457,7 +467,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       </div>
 
       <p className="text-[8px] text-slate-300 text-center mt-4">
-        Source: EPA Air Quality Design Values Report · ArcGIS FeatureServer · {selectedState} {endYear}
+        Source: EPA Air Quality Design Values Report · ArcGIS FeatureServer · {selectedState} {endYear || latestYear}
       </p>
     </div>
   );

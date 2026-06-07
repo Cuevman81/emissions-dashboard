@@ -409,19 +409,21 @@ export interface NaaqsResult {
   completeness: NaaqsCompleteness[];
   state: string;
   endYear: number;
+  latestYear?: number;
 }
 
 /**
  * Fetch NAAQS design values for a state
  */
-export async function fetchNaaqsDesignValues(state: string, endYear: number = 2024): Promise<NaaqsResult> {
+export async function fetchNaaqsDesignValues(state: string, endYear?: number): Promise<NaaqsResult> {
   try {
-    const res = await fetch(`/api/naaqs?state=${state}&endYear=${endYear}`);
-    if (!res.ok) return { designValues: [], trends: [], completeness: [], state, endYear };
+    const url = endYear !== undefined ? `/api/naaqs?state=${state}&endYear=${endYear}` : `/api/naaqs?state=${state}`;
+    const res = await fetch(url);
+    if (!res.ok) return { designValues: [], trends: [], completeness: [], state, endYear: endYear || 2024 };
     return await res.json();
   } catch (err) {
     console.error('NAAQS fetch error:', err);
-    return { designValues: [], trends: [], completeness: [], state, endYear };
+    return { designValues: [], trends: [], completeness: [], state, endYear: endYear || 2024 };
   }
 }
 

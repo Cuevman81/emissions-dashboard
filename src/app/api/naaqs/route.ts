@@ -467,14 +467,70 @@ function processCO(co1hrRecords: any[], co8hrRecords: any[], co1hrAll: any[], co
   return { dvs, trends, completeness: [] };
 }
 
+let cachedLatestYear: number | null = null;
+let cachedLatestYearTime = 0;
+const LATEST_YEAR_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+async function getLatestAvailableYear(): Promise<number> {
+  const now = Date.now();
+  if (cachedLatestYear && (now - cachedLatestYearTime < LATEST_YEAR_CACHE_TTL)) {
+    return cachedLatestYear;
+  }
+
+  const layerId = 1; // Ozone (representative criteria pollutant)
+  const where = '1=1';
+  const params = new URLSearchParams({
+    where,
+    outFields: 'DVYearText',
+    orderByFields: 'DVYearText DESC',
+    resultRecordCount: '1',
+    f: 'json',
+  });
+
+  const url = `${ARCGIS_BASE}/${layerId}/query?${params}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      const features = data.features || [];
+      if (features.length > 0 && features[0].attributes?.DVYearText) {
+        const yr = parseInt(features[0].attributes.DVYearText);
+        if (!isNaN(yr) && yr >= 2024) {
+          cachedLatestYear = yr;
+          cachedLatestYearTime = now;
+          return yr;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[NAAQS] Failed to fetch latest year from FeatureServer, using fallback:', err);
+  }
+
+  if (cachedLatestYear) {
+    return cachedLatestYear;
+  }
+  return 2024; // Absolute fallback
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = (searchParams.get('state') || 'MS').toUpperCase();
-  const endYear = parseInt(searchParams.get('endYear') || '2024');
   const stateName = STATE_NAMES[state];
 
   if (!stateName) {
     return NextResponse.json({ error: `Invalid state: ${state}` }, { status: 400 });
+  }
+
+  const latestYear = await getLatestAvailableYear();
+  const endYearParam = searchParams.get('endYear');
+  let endYear: number;
+  if (!endYearParam || endYearParam === 'undefined' || endYearParam === 'null') {
+    endYear = latestYear;
+  } else {
+    endYear = parseInt(endYearParam);
+    if (isNaN(endYear)) {
+      endYear = latestYear;
+    }
   }
 
   const resultCacheKey = `naaqs_arcgis_${state}_${endYear}.json`;
@@ -483,7 +539,12 @@ export async function GET(request: Request) {
     const stats = fs.statSync(resultCachePath);
     if (Date.now() - stats.mtimeMs < CACHE_TTL) {
       console.log(`[NAAQS] Cache hit: ${state}/${endYear}`);
-      return NextResponse.json(JSON.parse(fs.readFileSync(resultCachePath, 'utf8')));
+      try {
+        const cachedData = JSON.parse(fs.readFileSync(resultCachePath, 'utf8'));
+        // Ensure latestYear is injected in cached responses
+        cachedData.latestYear = latestYear;
+        return NextResponse.json(cachedData);
+      } catch { /* parse error, fallback to refetching */ }
     }
   }
 
@@ -535,7 +596,7 @@ export async function GET(request: Request) {
       return true;
     });
 
-    const result = { designValues: allDvs, trends: dedupedTrends, completeness: allCompleteness, state, endYear };
+    const result = { designValues: allDvs, trends: dedupedTrends, completeness: allCompleteness, state, endYear, latestYear };
 
     try {
       fs.writeFileSync(resultCachePath, JSON.stringify(result), 'utf8');
@@ -545,6 +606,6 @@ export async function GET(request: Request) {
     return NextResponse.json(result);
   } catch (err: any) {
     console.error('[NAAQS] ArcGIS query failed:', err.message);
-    return NextResponse.json({ error: err.message, designValues: [], trends: [], completeness: [] }, { status: 500 });
+    return NextResponse.json({ error: err.message, designValues: [], trends: [], completeness: [], state, endYear, latestYear }, { status: 500 });
   }
 }

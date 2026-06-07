@@ -1,0 +1,46 @@
+name: Daily Data Freshness Check
+
+on:
+  schedule:
+    # Run daily at 11:00 UTC (6:00 AM Central Time)
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+    # Allow running manually from the GitHub Actions tab
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run data freshness check
+        id: check
+        run: |
+          # The script exits with code 10 if updates are available, 0 if up-to-date, or 1 on error
+          node scripts/check-updates.js && echo "exit_code=0" >> $GITHUB_OUTPUT || exit_code=$?
+          if [ -n "$exit_code" ]; then
+            echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Issue if updates are available
+        if: steps.check.outputs.exit_code == '10'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if there is already an open issue for this update to prevent duplicate spam
+          existing_issue=$(gh issue list --search "Data Update Available: Emissions Dashboard" --state open --json number --jq '.[0].number')
+          if [ -z "$existing_issue" ]; then
+            gh issue create --title "Data Update Available: Emissions Dashboard" --body-file update_details.txt
+            echo "Created a new GitHub Issue for data update."
+          else
+            echo "An open update issue already exists (Issue #${existing_issue}). Skipping duplicate creation."
+          fi

@@ -39,6 +39,7 @@ export default function EmissionsDashboard() {
   const [showAll, setShowAll] = useState(false);
   const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'camd' | 'tri' | 'major' | 'synthetic' | 'minor'>('all');
   const [mapTriYear, setMapTriYear] = useState<string>('All');
+  const [selectedSector, setSelectedSector] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('inventory');
   const [dataSource, setDataSource] = useState<string>('');
 
@@ -82,6 +83,7 @@ export default function EmissionsDashboard() {
     setShowAqsMonitors(false);
     setSelectedMonitor(null);
     setNeiData(null);
+    setSelectedSector(null);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -131,10 +133,15 @@ export default function EmissionsDashboard() {
     } else if (mapFilter === 'minor') {
       sourceList = sourceList.filter(f => f.permitType === 'Federally Reportable Minor' || f.permitType === 'Other');
     }
+
+    if (selectedSector) {
+      sourceList = sourceList.filter(f => f.sector === selectedSector);
+    }
+
     if (showAll) return sourceList;
     if (!center) return [];
     return filterByRadius(sourceList, center[0], center[1], radiusMi);
-  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear]);
+  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear, selectedSector]);
 
   const proximityFacilities = useMemo(() => {
     let sourceList = allFacilities;
@@ -152,9 +159,14 @@ export default function EmissionsDashboard() {
     } else if (mapFilter === 'minor') {
       sourceList = sourceList.filter(f => f.permitType === 'Federally Reportable Minor' || f.permitType === 'Other');
     }
+
+    if (selectedSector) {
+      sourceList = sourceList.filter(f => f.sector === selectedSector);
+    }
+
     if (!center) return showAll ? sourceList : [];
     return filterByRadius(sourceList, center[0], center[1], radiusMi);
-  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear]);
+  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear, selectedSector]);
 
   const handleFacilityClick = (f: Facility) => {
     setSelectedFacility(f);
@@ -360,12 +372,17 @@ export default function EmissionsDashboard() {
             <Card className="overflow-hidden border-slate-200 shadow-sm">
               <CardHeader className="bg-white border-b border-slate-100 py-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle className="text-sm font-bold text-slate-600 uppercase tracking-tight flex items-center gap-2">
+                   <CardTitle className="text-sm font-bold text-slate-600 uppercase tracking-tight flex items-center gap-2 flex-wrap">
                     <MapPin className="h-4 w-4 text-blue-500" />
                     Facility Proximity Map ({allFacilities.length} total)
                     {center && (
                       <button onClick={() => { setCenter(null); setSelectedFacility(null); }} className="ml-2 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 px-2 py-0.5 rounded text-[10px] transition-colors">
                         ✕ Clear map pin
+                      </button>
+                    )}
+                    {selectedSector && (
+                      <button onClick={() => setSelectedSector(null)} className="ml-2 bg-indigo-50 hover:bg-red-50 text-indigo-600 hover:text-red-500 px-2 py-0.5 rounded text-[10px] font-bold border border-indigo-100 transition-colors">
+                        Sector: {selectedSector} ✕
                       </button>
                     )}
                   </CardTitle>
@@ -524,7 +541,13 @@ export default function EmissionsDashboard() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
-                  <FacilityInventoryTab selectedState={selectedState} allFacilities={allFacilities} isMounted={isMounted} />
+                  <FacilityInventoryTab
+                    selectedState={selectedState}
+                    allFacilities={allFacilities}
+                    isMounted={isMounted}
+                    selectedSector={selectedSector}
+                    onSectorSelect={setSelectedSector}
+                  />
                 </CardContent>
               </Card>
             ) : activeTab === 'naaqs' ? (

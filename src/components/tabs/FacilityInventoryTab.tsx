@@ -8,6 +8,8 @@ interface FacilityInventoryTabProps {
   selectedState: string;
   allFacilities: Facility[];
   isMounted: boolean;
+  selectedSector: string | null;
+  onSectorSelect: (sector: string | null) => void;
 }
 
 // Static metadata for data sources — latestYear is computed dynamically below
@@ -19,7 +21,13 @@ const DATA_SOURCE_META = [
   { key: 'aqs', label: 'AQS / ArcGIS', desc: 'NAAQS Design Values', color: 'emerald' },
 ];
 
-export default function FacilityInventoryTab({ selectedState, allFacilities, isMounted }: FacilityInventoryTabProps) {
+export default function FacilityInventoryTab({
+  selectedState,
+  allFacilities,
+  isMounted,
+  selectedSector,
+  onSectorSelect,
+}: FacilityInventoryTabProps) {
   const [naaqsLoading, setNaaqsLoading] = useState(true);
   const [designValues, setDesignValues] = useState<NaaqsDesignValue[]>([]);
 
@@ -248,13 +256,42 @@ export default function FacilityInventoryTab({ selectedState, allFacilities, isM
           <div className="space-y-1.5">
             {sortedSectors.map(([sector, count]) => {
               const pct = (count / Math.max(1, stats.total)) * 100;
+              const isSelected = selectedSector === sector;
+              const hasActiveFilter = selectedSector !== null;
               return (
-                <div key={sector} className="flex items-center gap-2">
-                  <span className="text-[10px] text-slate-600 font-medium w-24 truncate">{sector}</span>
+                <div
+                  key={sector}
+                  onClick={() => onSectorSelect(isSelected ? null : sector)}
+                  className={`flex items-center gap-2 cursor-pointer p-1.5 rounded-lg border transition-all ${
+                    isSelected
+                      ? 'bg-indigo-50/80 border-indigo-200/60 shadow-sm'
+                      : 'hover:bg-slate-50/80 border-transparent'
+                  }`}
+                >
+                  <span className={`text-[10px] truncate w-24 transition-colors ${
+                    isSelected
+                      ? 'text-indigo-700 font-bold'
+                      : (hasActiveFilter ? 'text-slate-400' : 'text-slate-600 font-medium')
+                  }`}>
+                    {sector}
+                  </span>
                   <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div className="bg-indigo-400 h-2 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        isSelected
+                          ? 'bg-indigo-600'
+                          : (hasActiveFilter ? 'bg-slate-200' : 'bg-indigo-400')
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
-                  <span className="text-[10px] font-mono font-bold text-slate-500 w-8 text-right">{count}</span>
+                  <span className={`text-[10px] font-mono w-8 text-right transition-colors ${
+                    isSelected
+                      ? 'text-indigo-700 font-bold'
+                      : (hasActiveFilter ? 'text-slate-400' : 'text-slate-500 font-bold')
+                  }`}>
+                    {count}
+                  </span>
                 </div>
               );
             })}

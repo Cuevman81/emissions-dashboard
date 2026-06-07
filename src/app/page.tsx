@@ -37,7 +37,7 @@ export default function EmissionsDashboard() {
   const [radiusMi, setRadiusMi] = useState(50);
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [filterReported, setFilterReported] = useState(false);
+  const [mapFilter, setMapFilter] = useState<'all' | 'nei' | 'camd' | 'tri'>('all');
   const [mapTriYear, setMapTriYear] = useState<string>('All');
   const [activeTab, setActiveTab] = useState<ActiveTab>('inventory');
   const [dataSource, setDataSource] = useState<string>('');
@@ -107,20 +107,28 @@ export default function EmissionsDashboard() {
       .catch(() => setCountyLoading(false));
   }, [center]);
 
+  useEffect(() => {
+    if (activeTab === 'psd' && mapFilter === 'tri') {
+      setMapFilter('all');
+    } else if (activeTab === 'toxics' && mapFilter === 'nei') {
+      setMapFilter('all');
+    }
+  }, [activeTab, mapFilter]);
+
   const nearbyFacilities = useMemo(() => {
     let sourceList = allFacilities;
-    if (filterReported) {
-      if (activeTab === 'toxics') {
-        sourceList = sourceList.filter(f => f.triId);
-        if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
-      } else {
-        sourceList = sourceList.filter(f => f.eisId);
-      }
+    if (mapFilter === 'tri') {
+      sourceList = sourceList.filter(f => f.triId);
+      if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
+    } else if (mapFilter === 'nei') {
+      sourceList = sourceList.filter(f => f.eisId);
+    } else if (mapFilter === 'camd') {
+      sourceList = sourceList.filter(f => f.camdId);
     }
     if (showAll) return sourceList;
     if (!center) return [];
     return filterByRadius(sourceList, center[0], center[1], radiusMi);
-  }, [allFacilities, center, radiusMi, showAll, activeTab, filterReported, mapTriYear]);
+  }, [allFacilities, center, radiusMi, showAll, mapFilter, mapTriYear]);
 
   const handleFacilityClick = (f: Facility) => {
     setSelectedFacility(f);
@@ -172,7 +180,7 @@ export default function EmissionsDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    const filterSuffix = filterReported ? '_reporters_only' : '_all_sources';
+    const filterSuffix = mapFilter !== 'all' ? `_filter_${mapFilter}` : '_all_sources';
     link.download = `${selectedState.toLowerCase()}_${mode.toLowerCase()}_export_${radiusMi}mi${filterSuffix}.csv`;
     link.click();
   };
@@ -339,7 +347,7 @@ export default function EmissionsDashboard() {
                     <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-1 rounded-full animate-pulse font-bold">CLICK MAP TO SET PROJECT LOCATION</span>
                   )}
                   <div className="flex items-center gap-2">
-                    {filterReported && activeTab === 'toxics' && (
+                    {mapFilter === 'tri' && (
                       <select value={mapTriYear} onChange={e => setMapTriYear(e.target.value)} className="text-[10px] font-bold px-2 py-1 rounded-full border border-purple-200 bg-purple-50 text-purple-700 outline-none cursor-pointer">
                         <option value="All">All TRI Years</option>
                         {Array.from(new Set(allFacilities.flatMap(f => f.triYears || []))).sort((a, b) => parseInt(b) - parseInt(a)).map(yr => (
@@ -347,15 +355,28 @@ export default function EmissionsDashboard() {
                         ))}
                       </select>
                     )}
-                    <button
-                      onClick={() => setFilterReported(!filterReported)}
-                      className={`text-[10px] font-bold px-3 py-1 rounded-full border transition-all ${filterReported ? (activeTab === 'toxics' ? 'bg-purple-600 text-white border-purple-600' : 'bg-amber-600 text-white border-amber-600') : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                    <select
+                      value={mapFilter}
+                      onChange={e => setMapFilter(e.target.value as any)}
+                      className={`text-[10px] font-bold px-3 py-1.5 rounded-full border transition-all cursor-pointer outline-none ${
+                        mapFilter === 'all'
+                          ? 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                          : mapFilter === 'tri'
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : mapFilter === 'camd'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-amber-600 text-white border-amber-600'
+                      }`}
                     >
-                      {filterReported
-                        ? (activeTab === 'toxics' ? 'Showing TRI Reporters' : 'Showing NEI 2020 Reporters')
-                        : (activeTab === 'toxics' ? 'Filter: TRI Reporters' : 'Filter: NEI 2020 Reporters')
-                      }
-                    </button>
+                      <option value="all" className="bg-white text-slate-700">Filter: None (Show All)</option>
+                      {(activeTab === 'inventory' || activeTab === 'psd' || activeTab === 'naaqs') && (
+                        <option value="nei" className="bg-white text-slate-700">Filter: NEI 2020 Reporters</option>
+                      )}
+                      <option value="camd" className="bg-white text-slate-700">Filter: CAMD (Power Plants)</option>
+                      {(activeTab === 'inventory' || activeTab === 'toxics' || activeTab === 'naaqs') && (
+                        <option value="tri" className="bg-white text-slate-700">Filter: TRI (Toxics) Reporters</option>
+                      )}
+                    </select>
                     <button
                       onClick={handleClassIToggle}
                       disabled={classILoading}
@@ -619,7 +640,7 @@ export default function EmissionsDashboard() {
                           isMounted={isMounted}
                           aqsMonitors={aqsMonitors} showAqsMonitors={showAqsMonitors}
                           handleAqsToggle={handleAqsToggle} aqsError={aqsError} aqsLoading={aqsLoading}
-                          filterReported={filterReported} mapTriYear={mapTriYear}
+                          filterReported={mapFilter === 'tri'} mapTriYear={mapTriYear}
                         />
                       ) : (
                         <PsdTab

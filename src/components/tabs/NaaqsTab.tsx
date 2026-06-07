@@ -381,6 +381,25 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
 
               const refNaaqs = designValues.find(dv => dv.pollutant === pollutant)?.naaqs ?? naaqs;
 
+              // Calculate Y-axis domain boundaries dynamically
+              const allValues: number[] = [];
+              chartData.forEach(point => {
+                Object.keys(point).forEach(key => {
+                  if (key !== 'year' && point[key] != null) {
+                    allValues.push(point[key]);
+                  }
+                });
+              });
+              if (refNaaqs != null) {
+                allValues.push(refNaaqs);
+              }
+              const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+              const dataMax = allValues.length > 0 ? Math.max(...allValues) : 100;
+              const range = dataMax - dataMin;
+              const padding = range === 0 ? (dataMax === 0 ? 1 : dataMax * 0.1) : range * 0.1;
+              const yMin = pollutant === 'PM10' ? 0 : Math.max(0, dataMin - padding);
+              const yMax = dataMax + padding;
+
               return (
                 <div key={pollutant} className="bg-white rounded-lg border border-slate-200 p-4">
                   <div className="flex items-center justify-between mb-3">
@@ -394,7 +413,18 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
                       <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                         <XAxis dataKey="year" fontSize={9} tickMargin={8} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-                        <YAxis fontSize={9} tick={{ fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                        <YAxis
+                          fontSize={9}
+                          tick={{ fill: '#94A3B8' }}
+                          axisLine={false}
+                          tickLine={false}
+                          domain={[yMin, yMax]}
+                          tickFormatter={(val) => {
+                            if (pollutant === 'O3') return val.toFixed(3);
+                            if (pollutant === 'PM10') return val.toFixed(0);
+                            return val.toFixed(1);
+                          }}
+                        />
                         <Tooltip content={<NaaqsTooltip />} position={{ x: -215, y: 15 }} />
                         <Legend wrapperStyle={{ fontSize: '8px', paddingTop: '10px' }} iconType="circle" height={40} verticalAlign="bottom" />
                         <ReferenceLine

@@ -290,8 +290,16 @@ export default function EmissionsDashboard() {
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-slate-900 leading-tight">MS DEQ Air Division Dashboard</h1>
               <p className="text-slate-500 italic mt-1 text-sm">PSD · Toxics · NAAQS · Facility Inventory</p>
+              
+              <div className="mt-2.5 text-xs text-slate-600 flex flex-wrap items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 w-fit">
+                <span>For comments, bug reports, questions, or suggestions, please contact:</span>
+                <span className="font-bold text-slate-950">Rodney Cuevas</span>
+                <span className="text-slate-300">·</span>
+                <a href="mailto:RCuevas@mdeq.ms.gov" className="text-blue-600 hover:underline font-semibold">RCuevas@mdeq.ms.gov</a>
+              </div>
+
               {dataSource && (
-                <div className="flex items-center gap-1.5 mt-2 text-slate-400 text-[10px]">
+                <div className="flex items-center gap-1.5 mt-2.5 text-slate-400 text-[10px]">
                   <Database className="h-3 w-3" />
                   Source: {dataSource === 'ECHO' ? 'EPA ECHO Database' : 'EPA Toxics Release Inventory (Local Data)'}
                   {' · '}{allFacilities.length} facilities loaded
@@ -908,9 +916,7 @@ export default function EmissionsDashboard() {
 
       <footer className="mt-12 py-8 border-t border-slate-200">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-slate-500 text-xs font-medium">For comments, bug reports, questions, or suggestions, please contact:</p>
-          <p className="text-slate-900 text-sm font-bold mt-1">Rodney Cuevas — <a href="mailto:RCuevas@mdeq.ms.gov" className="text-blue-600 hover:underline">RCuevas@mdeq.ms.gov</a></p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-400 uppercase tracking-widest">
+          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 uppercase tracking-widest">
             <span>Mississippi Department of Environmental Quality</span>
             <span>·</span>
             <span>Air Division — PSD · Toxics · NAAQS</span>

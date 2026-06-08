@@ -166,7 +166,7 @@ async function main() {
   const apiKey = process.env.EPA_CAMD_API_KEY;
   if (apiKey) {
     try {
-      const nextCamdYear = 2026;
+      const nextCamdYear = 2027;
       console.log(`[CAMD/CAMPD] Checking EPA for year ${nextCamdYear}...`);
       const camdUrl = `https://api.epa.gov/easey/emissions-mgmt/emissions/apportioned/annual?page=1&perPage=1&year=${nextCamdYear}`;
       const resCamd = await fetch(camdUrl, {
@@ -188,10 +188,12 @@ async function main() {
 
         if (hasData) {
           updateNeeded = true;
-          updateMessages.push(`- **CAMD/CAMPD Emissions Update Available**: EPA has published power plant emissions data for the year **${nextCamdYear}**.\n  * Current Baseline: \`2025\`\n  * New Year Available: \`${nextCamdYear}\``);
+          updateMessages.push(`- **CAMD/CAMPD Emissions Update Available**: EPA has published power plant emissions data for the year **${nextCamdYear}**.\n  * Current Baseline: \`2026\`\n  * New Year Available: \`${nextCamdYear}\``);
         } else {
           console.log(`[CAMD/CAMPD] Year ${nextCamdYear} data is not yet available.`);
         }
+      } else if (resCamd.status === 400) {
+        console.log(`[CAMD/CAMPD] Year ${nextCamdYear} data is not yet available (API returned status 400).`);
       } else {
         console.error(`[CAMD/CAMPD] API returned status ${resCamd.status}`);
       }

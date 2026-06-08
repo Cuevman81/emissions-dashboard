@@ -8,7 +8,7 @@ const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 // CAMPD annual emissions endpoint — EGUs (power plants) only
 // Fields returned: so2Mass (tons), noxMass (tons), co2Mass (short tons)
 async function fetchHistoricalCamdEmissions(orisCode: string): Promise<Record<string, { pollutant: string; amount: number; unit: string; emissionsType: 'actual' }[]>> {
-  const years = [2020, 2021, 2022, 2023, 2024, 2025];
+  const years = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
   const results: Record<string, { pollutant: string; amount: number; unit: string; emissionsType: 'actual' }[]> = {};
 
   const apiKey = process.env.EPA_CAMD_API_KEY || '';

@@ -24,6 +24,8 @@ jobs:
 
       - name: Run data freshness check
         id: check
+        env:
+          EPA_CAMD_API_KEY: ${{ secrets.EPA_CAMD_API_KEY }}
         run: |
           # The script exits with code 10 if updates are available, 0 if up-to-date, or 1 on error
           node scripts/check-updates.js && echo "exit_code=0" >> $GITHUB_OUTPUT || exit_code=$?

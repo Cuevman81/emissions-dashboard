@@ -40,3 +40,4 @@ src/cache/
 /scratch
 /src/logs
 .claude/
+/update_details.txt

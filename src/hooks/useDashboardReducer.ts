@@ -133,7 +133,6 @@ export type DashboardAction =
   | { type: 'FACILITY_CLOSED' }
   | { type: 'MONITOR_CLOSED' }
   | { type: 'CLEAR_MAP_PIN' }
-  | { type: 'DESELECT_FACILITY' }
   | { type: 'DESELECT_MONITOR' }
   | { type: 'MONITOR_SELECTED'; payload: AqsMonitor };
 
@@ -269,13 +268,6 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
       };
 
     // "Close Details" / "Deselect" in sidebar
-    case 'DESELECT_FACILITY':
-      return {
-        ...state,
-        selectedFacility: null,
-        activeTab: 'inventory',
-      };
-
     case 'DESELECT_MONITOR':
       return {
         ...state,

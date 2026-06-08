@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { Loader2, FlaskConical, BarChart3, AlertTriangle, ShieldAlert, Activity, Clock } from 'lucide-react';
 import { CustomTooltip } from '@/components/ChartTooltips';
@@ -8,7 +8,6 @@ import {
   Facility,
   HapRecord,
   fetchHaps,
-  fetchNeiFacility,
   NeiFacilityData,
   AqsMonitor,
   getNearestMonitor,
@@ -18,9 +17,7 @@ import { shortenChemicalName } from '@/lib/constants';
 interface ToxicsTabProps {
   selectedFacility: Facility;
   neiData: NeiFacilityData | null;
-  setNeiData: (d: NeiFacilityData | null) => void;
   neiLoading: boolean;
-  setNeiLoading: (b: boolean) => void;
   isMounted: boolean;
   aqsMonitors: AqsMonitor[];
   showAqsMonitors: boolean;
@@ -34,12 +31,12 @@ interface ToxicsTabProps {
 }
 
 export default function ToxicsTab({
-  selectedFacility, neiData, setNeiData, neiLoading, setNeiLoading, isMounted,
+  selectedFacility, neiData, neiLoading, isMounted,
   aqsMonitors, showAqsMonitors, handleAqsToggle, aqsError, aqsLoading,
   filterReported, mapTriYear, neiYear, setNeiYear,
 }: ToxicsTabProps) {
   const [toxics, setToxics] = useState<HapRecord[]>([]);
-  const [toxicsYear, setToxicsYear] = useState<number | string | null>(null);
+  const [toxicsYear, setToxicsYear] = useState<string | null>(null);
   const [toxicsLoading, setToxicsLoading] = useState(false);
   const [historicalHaps, setHistoricalHaps] = useState<Record<string, HapRecord[]>>({});
   const [isTRIReporter, setIsTRIReporter] = useState<boolean | null>(null);
@@ -54,19 +51,12 @@ export default function ToxicsTab({
       setToxicsYear(null);
       setHistoricalHaps({});
 
-      if (selectedFacility.eisId) {
-        setNeiLoading(true);
-        fetchNeiFacility(selectedFacility.eisId, neiYear)
-          .then(result => { if (!cancelled) { setNeiData(result); setNeiLoading(false); } })
-          .catch(() => { if (!cancelled) setNeiLoading(false); });
-      }
-
       const targetYear = (filterReported && mapTriYear !== 'All') ? mapTriYear : undefined;
       const data = await fetchHaps(selectedFacility.id, selectedFacility.triId ?? undefined, targetYear);
       if (cancelled) return;
 
       setToxics(data.haps);
-      setToxicsYear(data.year);
+      setToxicsYear(data.year ? String(data.year) : null);
       setAvailableToxicsYears(data.availableYears || []);
       setHistoricalHaps(data.historicalHaps || {});
       setIsTRIReporter(data.isTRIReporter ?? null);
@@ -75,10 +65,12 @@ export default function ToxicsTab({
 
     load();
     return () => { cancelled = true; };
-  }, [selectedFacility.id, neiYear]);
+  }, [selectedFacility.id, filterReported, mapTriYear]);
 
   // Ambient context panel
-  const nearest = getNearestMonitor(selectedFacility.lat, selectedFacility.lon, aqsMonitors);
+  const nearest = useMemo(() => {
+    return getNearestMonitor(selectedFacility.lat, selectedFacility.lon, aqsMonitors);
+  }, [selectedFacility.lat, selectedFacility.lon, aqsMonitors]);
   const isAqsOff = !showAqsMonitors;
 
   return (
@@ -179,7 +171,7 @@ export default function ToxicsTab({
                 setToxicsLoading(true);
                 const data = await fetchHaps(selectedFacility.id, selectedFacility.triId ?? undefined, yr);
                 setToxics(data.haps);
-                setToxicsYear(data.year);
+                setToxicsYear(data.year ? String(data.year) : null);
                 setToxicsLoading(false);
               }}
               aria-label="Select TRI reporting year"

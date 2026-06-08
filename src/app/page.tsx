@@ -9,6 +9,7 @@ import {
   fetchAqsMonitors,
   getNearestMonitor,
   fetchNeiCounty,
+  fetchNeiFacility,
 } from '@/lib/data-service';
 import { US_STATES } from '@/lib/constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,15 +42,11 @@ export default function EmissionsDashboard() {
   const setSelectedState = useCallback((s: string) => dispatch({ type: 'SET_STATE', payload: s }), [dispatch]);
   const setCenter = useCallback((c: [number, number] | null) => dispatch({ type: 'SET_CENTER', payload: c }), [dispatch]);
   const setRadiusMi = useCallback((r: number) => dispatch({ type: 'SET_RADIUS', payload: r }), [dispatch]);
-  const setSelectedFacility = useCallback((f: Facility | null) => dispatch({ type: 'SELECT_FACILITY', payload: f }), [dispatch]);
-  const setSelectedMonitor = useCallback((m: import('@/lib/data-service').AqsMonitor | null) => dispatch({ type: 'SELECT_MONITOR', payload: m }), [dispatch]);
   const setShowAll = useCallback((v: boolean) => v !== showAll && dispatch({ type: 'TOGGLE_SHOW_ALL' }), [dispatch, showAll]);
   const setMapFilter = useCallback((f: MapFilter) => dispatch({ type: 'SET_MAP_FILTER', payload: f }), [dispatch]);
   const setMapTriYear = useCallback((y: string) => dispatch({ type: 'SET_MAP_TRI_YEAR', payload: y }), [dispatch]);
   const setSelectedSector = useCallback((s: string | null) => dispatch({ type: 'SET_SECTOR', payload: s }), [dispatch]);
   const setNeiYear = useCallback((y: '2020' | '2023') => dispatch({ type: 'SET_NEI_YEAR', payload: y }), [dispatch]);
-  const setNeiData = useCallback((d: import('@/lib/data-service').NeiFacilityData | null) => dispatch({ type: 'SET_NEI_DATA', payload: d }), [dispatch]);
-  const setNeiLoading = useCallback((b: boolean) => dispatch({ type: 'SET_NEI_LOADING', payload: b }), [dispatch]);
 
   const triggerNeiSync = useCallback(async () => {
     dispatch({ type: 'SET_NEI_SYNC_STATUS', payload: 'updating' });
@@ -123,6 +120,37 @@ export default function EmissionsDashboard() {
       .catch(() => dispatch({ type: 'SET_COUNTY_LOADING', payload: false }));
   }, [center, dispatch]);
 
+  // Hoisted NEI 2020/2023 data fetching effect
+  useEffect(() => {
+    if (selectedFacility?.eisId) {
+      let active = true;
+      dispatch({ type: 'SET_NEI_LOADING', payload: true });
+      dispatch({ type: 'SET_NEI_DATA', payload: null });
+      
+      fetchNeiFacility(selectedFacility.eisId, neiYear)
+        .then(result => {
+          if (active) {
+            dispatch({ type: 'SET_NEI_DATA', payload: result });
+            dispatch({ type: 'SET_NEI_LOADING', payload: false });
+          }
+        })
+        .catch(err => {
+          console.warn('Failed to fetch NEI data:', err);
+          if (active) {
+            dispatch({ type: 'SET_NEI_DATA', payload: null });
+            dispatch({ type: 'SET_NEI_LOADING', payload: false });
+          }
+        });
+        
+      return () => {
+        active = false;
+      };
+    } else {
+      dispatch({ type: 'SET_NEI_DATA', payload: null });
+      dispatch({ type: 'SET_NEI_LOADING', payload: false });
+    }
+  }, [selectedFacility?.eisId, neiYear, dispatch]);
+
   useEffect(() => {
     if (activeTab === 'psd' && mapFilter === 'tri') {
       dispatch({ type: 'SET_MAP_FILTER', payload: 'all' });
@@ -138,6 +166,9 @@ export default function EmissionsDashboard() {
       if (mapTriYear !== 'All') sourceList = sourceList.filter(f => f.triYears?.includes(mapTriYear));
     } else if (mapFilter === 'nei') {
       sourceList = sourceList.filter(f => f.eisId);
+      if (neiYear === '2023') {
+        sourceList = sourceList.filter(f => f.hasNei2023);
+      }
     } else if (mapFilter === 'nei2023') {
       sourceList = sourceList.filter(f => f.hasNei2023);
     } else if (mapFilter === 'camd') {
@@ -154,24 +185,33 @@ export default function EmissionsDashboard() {
       sourceList = sourceList.filter(f => f.sector === selectedSector);
     }
     return sourceList;
-  }, [allFacilities, mapFilter, mapTriYear, selectedSector]);
+  }, [allFacilities, mapFilter, mapTriYear, neiYear, selectedSector]);
+
+  const radiusFiltered = useMemo(() => {
+    if (!center) return [];
+    return filterByRadius(filteredFacilities, center[0], center[1], radiusMi);
+  }, [filteredFacilities, center, radiusMi]);
 
   const nearbyFacilities = useMemo(() => {
     if (showAll) return filteredFacilities;
-    if (!center) return [];
-    return filterByRadius(filteredFacilities, center[0], center[1], radiusMi);
-  }, [filteredFacilities, center, radiusMi, showAll]);
+    return radiusFiltered;
+  }, [showAll, filteredFacilities, radiusFiltered]);
 
   const proximityFacilities = useMemo(() => {
     if (!center) return showAll ? filteredFacilities : [];
-    return filterByRadius(filteredFacilities, center[0], center[1], radiusMi);
-  }, [filteredFacilities, center, radiusMi, showAll]);
+    return radiusFiltered;
+  }, [center, showAll, filteredFacilities, radiusFiltered]);
+
+  const nearestMonitor = useMemo(() => {
+    if (!selectedFacility || aqsMonitors.length === 0) return null;
+    return getNearestMonitor(selectedFacility.lat, selectedFacility.lon, aqsMonitors);
+  }, [selectedFacility, aqsMonitors]);
 
   const handleFacilityClick = useCallback((f: Facility) => {
     dispatch({ type: 'FACILITY_CLICKED', payload: f });
   }, [dispatch]);
 
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     if (proximityFacilities.length === 0) return;
     const eisIds = proximityFacilities.map(f => f.eisId).filter(Boolean) as string[];
     const triIds = proximityFacilities.map(f => f.triId).filter(Boolean) as string[];
@@ -217,7 +257,7 @@ export default function EmissionsDashboard() {
     const filterSuffix = mapFilter !== 'all' ? `_filter_${mapFilter}` : '_all_sources';
     link.download = `${selectedState.toLowerCase()}_${mode.toLowerCase()}_export_${radiusMi}mi${filterSuffix}.csv`;
     link.click();
-  };
+  }, [proximityFacilities, activeTab, mapTriYear, mapFilter, selectedState, radiusMi]);
 
   const handleClassIToggle = useCallback(async () => {
     const next = !showClassI;
@@ -251,8 +291,7 @@ export default function EmissionsDashboard() {
   }, [showAqsMonitors, aqsMonitors.length, hasRefreshedSession, selectedState, dispatch]);
 
   const handleMonitorClick = useCallback((monitor: import('@/lib/data-service').AqsMonitor) => {
-    dispatch({ type: 'SELECT_FACILITY', payload: null });
-    dispatch({ type: 'SELECT_MONITOR', payload: monitor });
+    dispatch({ type: 'MONITOR_SELECTED', payload: monitor });
   }, [dispatch]);
 
   const mapDefaultCenter = STATE_CENTERS[selectedState] || [32.35, -89.39];
@@ -406,7 +445,7 @@ export default function EmissionsDashboard() {
                     Facility Proximity Map ({allFacilities.length} total)
                     {center && (
                       <button
-                        onClick={() => { setCenter(null); setSelectedFacility(null); setActiveTab('inventory'); }}
+                        onClick={() => dispatch({ type: 'CLEAR_MAP_PIN' })}
                         aria-label="Clear map pin and reset project location"
                         className="ml-2 bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 px-2 py-0.5 rounded text-[10px] transition-colors"
                       >
@@ -527,14 +566,14 @@ export default function EmissionsDashboard() {
                   <table className="w-full text-sm" aria-label={`${proximityFacilities.length} facilities within ${radiusMi} miles`}>
                     <thead className="bg-slate-50 sticky top-0 border-b border-slate-200">
                       <tr>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Facility Name</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">City</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Type</th>
-                        <th className="px-4 py-3 text-left font-semibold text-slate-700">Sources</th>
-                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Lat</th>
-                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Lon</th>
-                        <th className="px-4 py-3 text-right font-semibold text-slate-700">Distance</th>
-                        <th className="px-4 py-3 text-center font-semibold text-slate-700">Action</th>
+                        <th scope="col" className="px-4 py-3 text-left font-semibold text-slate-700">Facility Name</th>
+                        <th scope="col" className="px-4 py-3 text-left font-semibold text-slate-700">City</th>
+                        <th scope="col" className="px-4 py-3 text-left font-semibold text-slate-700">Type</th>
+                        <th scope="col" className="px-4 py-3 text-left font-semibold text-slate-700">Sources</th>
+                        <th scope="col" className="px-4 py-3 text-right font-semibold text-slate-700">Lat</th>
+                        <th scope="col" className="px-4 py-3 text-right font-semibold text-slate-700">Lon</th>
+                        <th scope="col" className="px-4 py-3 text-right font-semibold text-slate-700">Distance</th>
+                        <th scope="col" className="px-4 py-3 text-center font-semibold text-slate-700">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -647,16 +686,10 @@ export default function EmissionsDashboard() {
                           <p className="text-[10px] font-bold">CAMD</p>
                           <p className="text-[8px] opacity-80">{selectedFacility.camdId ? 'CEMS Monitoring' : 'No CAMD ID'}</p>
                         </div>
-                        {(() => {
-                          const nearest = getNearestMonitor(selectedFacility.lat, selectedFacility.lon, aqsMonitors);
-                          const isAqsActive = showAqsMonitors && nearest && nearest.distance < 10;
-                          return (
-                            <div className={`p-2 rounded-lg border text-center ${isAqsActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-300 border-slate-100'}`}>
-                              <p className="text-[10px] font-bold">AQS</p>
-                              <p className="text-[8px] opacity-80">{nearest ? `${(nearest.distance ?? 0).toFixed(1)}mi Near` : 'No Nearby Site'}</p>
-                            </div>
-                          );
-                        })()}
+                        <div className={`p-2 rounded-lg border text-center ${showAqsMonitors && nearestMonitor && nearestMonitor.distance < 10 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-300 border-slate-100'}`}>
+                          <p className="text-[10px] font-bold">AQS</p>
+                          <p className="text-[8px] opacity-80">{nearestMonitor ? `${(nearestMonitor.distance ?? 0).toFixed(1)}mi Near` : 'No Nearby Site'}</p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -719,7 +752,7 @@ export default function EmissionsDashboard() {
                           <strong>Design values and attainment status</strong> for this monitor are available on the <strong>NAAQS tab</strong>. Switch tabs to view certified EPA design values for all criteria pollutants.
                         </p>
                         <button
-                          onClick={() => { setActiveTab('naaqs'); setSelectedMonitor(null); }}
+                          onClick={() => { dispatch({ type: 'SET_ACTIVE_TAB', payload: 'naaqs' }); dispatch({ type: 'SELECT_MONITOR', payload: null }); }}
                           aria-label="Navigate to NAAQS tab to view design values for this monitor"
                           className="mt-2 w-full py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-sm"
                         >
@@ -728,7 +761,7 @@ export default function EmissionsDashboard() {
                       </div>
 
                       <button
-                        onClick={() => { setSelectedMonitor(null); setActiveTab('inventory'); }}
+                        onClick={() => dispatch({ type: 'DESELECT_MONITOR' })}
                         aria-label="Deselect monitoring site and return to inventory"
                         className="w-full py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                       >
@@ -756,8 +789,8 @@ export default function EmissionsDashboard() {
                       {activeTab === 'toxics' ? (
                         <ToxicsTab
                           selectedFacility={selectedFacility}
-                          neiData={neiData} setNeiData={setNeiData}
-                          neiLoading={neiLoading} setNeiLoading={setNeiLoading}
+                          neiData={neiData}
+                          neiLoading={neiLoading}
                           isMounted={isMounted}
                           aqsMonitors={aqsMonitors} showAqsMonitors={showAqsMonitors}
                           handleAqsToggle={handleAqsToggle} aqsError={aqsError} aqsLoading={aqsLoading}
@@ -767,14 +800,14 @@ export default function EmissionsDashboard() {
                       ) : (
                         <PsdTab
                           selectedFacility={selectedFacility}
-                          neiData={neiData} setNeiData={setNeiData}
-                          neiLoading={neiLoading} setNeiLoading={setNeiLoading}
+                          neiData={neiData}
+                          neiLoading={neiLoading}
                           isMounted={isMounted}
                           neiYear={neiYear} setNeiYear={setNeiYear}
                         />
                       )}
                       <button
-                        onClick={() => { setSelectedFacility(null); setActiveTab('inventory'); }}
+                        onClick={() => dispatch({ type: 'FACILITY_CLOSED' })}
                         aria-label="Close facility details and return to inventory"
                         className="w-full py-2 mt-4 text-xs font-bold text-slate-500 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                       >

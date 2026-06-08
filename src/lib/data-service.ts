@@ -131,10 +131,7 @@ export async function fetchFacilitiesByState(state: string): Promise<Facility[]>
   }
 }
 
-/** @deprecated use fetchFacilitiesByState instead */
-export async function fetchMSFacilities(): Promise<Facility[]> {
-  return fetchFacilitiesByState('MS');
-}
+
 
 /**
  * Fetch Criteria Pollutant emissions for PSD modeling.
@@ -166,19 +163,7 @@ export async function fetchEmissions(
   }
 }
 
-/**
- * Fetch Toxic chemical releases for a facility
- */
-export async function fetchToxics(triId: string): Promise<{ chemicals: ToxicChemical[], year: number | string | null, isSimulated: boolean }> {
-  try {
-    const res = await fetch(`/api/toxics?triId=${triId}`);
-    if (!res.ok) return { chemicals: [], year: null, isSimulated: false };
-    return await res.json();
-  } catch (err) {
-    console.error('Toxics Service Error:', err);
-    return { chemicals: [], year: null, isSimulated: false };
-  }
-}
+
 
 /**
  * Filter facilities by distance from a center point (in Miles)
@@ -201,7 +186,6 @@ export function filterByRadius(facilities: Facility[], centerLat: number, center
     .filter(f => f.distance! <= radiusMiles)
     .sort((a, b) => a.distance! - b.distance!);
 
-  console.log(`Filtered ${facilities.length} down to ${filtered.length} facilities within ${radiusMiles} miles`);
   return filtered;
 }
 
@@ -334,33 +318,7 @@ export async function fetchAqsMonitors(state: string, refresh: boolean = false):
   }
 }
 
-/**
- * Fetch recent HAP sample concentrations for a specific monitor
- */
-export async function fetchAqsSamples(monitorId: string, year: number | string = 2023): Promise<AqsSample[]> {
-  try {
-    const res = await fetch(`/api/aqs-monitors?monitorId=${monitorId}&mode=samples&year=${year}`);
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (err) {
-    console.error('AQS Samples fetch error:', err);
-    return [];
-  }
-}
 
-/**
- * Fetch multi-year annual statistics for a specific monitor
- */
-export async function fetchAqsAnnualData(monitorId: string): Promise<any[]> {
-  try {
-    const res = await fetch(`/api/aqs-monitors?monitorId=${monitorId}&mode=annual`);
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (err) {
-    console.error('AQS Annual Data fetch error:', err);
-    return [];
-  }
-}
 
 /**
  * Helper to find the nearest AQS monitor to a given point

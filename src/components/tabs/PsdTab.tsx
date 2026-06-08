@@ -12,16 +12,13 @@ import {
   StackParameter,
   EmissionRecord,
   fetchEmissions,
-  fetchNeiFacility,
   NeiFacilityData,
 } from '@/lib/data-service';
 
 interface PsdTabProps {
   selectedFacility: Facility;
   neiData: NeiFacilityData | null;
-  setNeiData: (d: NeiFacilityData | null) => void;
   neiLoading: boolean;
-  setNeiLoading: (b: boolean) => void;
   isMounted: boolean;
   neiYear: '2020' | '2023';
   setNeiYear: (y: '2020' | '2023') => void;
@@ -30,9 +27,7 @@ interface PsdTabProps {
 export default function PsdTab({
   selectedFacility,
   neiData,
-  setNeiData,
   neiLoading,
-  setNeiLoading,
   isMounted,
   neiYear,
   setNeiYear,
@@ -53,6 +48,9 @@ export default function PsdTab({
   const countyName = neiData?.county ? neiData.county.replace(/\s+County$/i, '').trim() : '';
   const psdBaselines = psdBaselinesData as Record<string, { NO2: string; SO2: string; PM10: string; "PM2.5": string }>;
 
+  const [manualPollutant, setManualPollutant] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
+
   useEffect(() => {
     if (countyName && countyName in psdBaselinesData) {
       setSelectedCounty(countyName);
@@ -65,13 +63,6 @@ export default function PsdTab({
     async function load() {
       setEmissionsLoading(true);
       setManualEmissions([]);
-
-      if (selectedFacility.eisId) {
-        setNeiLoading(true);
-        fetchNeiFacility(selectedFacility.eisId, neiYear)
-          .then(result => { if (!cancelled) { setNeiData(result); setNeiLoading(false); } })
-          .catch(() => { if (!cancelled) setNeiLoading(false); });
-      }
 
       const data = await fetchEmissions(selectedFacility.id, selectedFacility.camdId ?? undefined);
       if (cancelled) return;
@@ -99,7 +90,7 @@ export default function PsdTab({
 
     load();
     return () => { cancelled = true; };
-  }, [selectedFacility.id, neiYear]);
+  }, [selectedFacility.id]);
 
   const combinedEmissions = [...emissions, ...manualEmissions];
   let actualEmissions = combinedEmissions.filter(e => e.emissionsType === 'actual' || !e.emissionsType);
@@ -142,42 +133,61 @@ export default function PsdTab({
           </h3>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setShowManualEmissionForm(!showManualEmissionForm)}
-              aria-expanded={showManualEmissionForm}
-              className="text-[9px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-            >
-              {showManualEmissionForm ? 'Cancel' : '+ Add Data'}
-            </button>
-            {emissionsYear && !isSimulated && (
-              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                {emissionsYear} CAMPD
-              </span>
-            )}
-          </div>
-        </div>
-
-        {showManualEmissionForm && (
-          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
-            <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase">Add Manual Emission Record</p>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <input id="manual-pollutant" placeholder="Pollutant (e.g. PM2.5)" aria-label="Pollutant name" className="text-xs p-1.5 border rounded" />
-              <input id="manual-amount" type="number" placeholder="Amount (TPY)" aria-label="Emission amount in TPY" className="text-xs p-1.5 border rounded" />
-            </div>
-            <button
               onClick={() => {
-                const p = (document.getElementById('manual-pollutant') as HTMLInputElement).value;
-                const a = parseFloat((document.getElementById('manual-amount') as HTMLInputElement).value);
-                if (p && !isNaN(a)) {
-                  setManualEmissions([...manualEmissions, { pollutant: p, amount: a, unit: 'TPY', emissionsType: 'actual' }]);
-                  setShowManualEmissionForm(false);
-                }
-              }}
-              className="w-full bg-blue-600 text-white text-xs font-bold py-1.5 rounded hover:bg-blue-700"
-            >
-              Add Record
-            </button>
+              setShowManualEmissionForm(!showManualEmissionForm);
+              setManualPollutant('');
+              setManualAmount('');
+            }}
+            aria-expanded={showManualEmissionForm}
+            className="text-[9px] font-bold px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+          >
+            {showManualEmissionForm ? 'Cancel' : '+ Add Data'}
+          </button>
+          {emissionsYear && !isSimulated && (
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+              {emissionsYear} CAMPD
+            </span>
+          )}
+        </div>
+      </div>
+
+      {showManualEmissionForm && (
+        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 mb-4">
+          <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase">Add Manual Emission Record</p>
+          <div className="grid grid-cols-2 gap-2 mb-2">
+            <input
+              value={manualPollutant}
+              onChange={e => setManualPollutant(e.target.value)}
+              placeholder="Pollutant (e.g. PM2.5)"
+              aria-label="Pollutant name"
+              className="text-xs p-1.5 border rounded"
+            />
+            <input
+              value={manualAmount}
+              onChange={e => setManualAmount(e.target.value)}
+              type="number"
+              placeholder="Amount (TPY)"
+              aria-label="Emission amount in TPY"
+              className="text-xs p-1.5 border rounded"
+            />
           </div>
-        )}
+          <button
+            onClick={() => {
+              const p = manualPollutant.trim();
+              const a = parseFloat(manualAmount);
+              if (p && !isNaN(a)) {
+                setManualEmissions([...manualEmissions, { pollutant: p, amount: a, unit: 'TPY', emissionsType: 'actual' }]);
+                setManualPollutant('');
+                setManualAmount('');
+                setShowManualEmissionForm(false);
+              }
+            }}
+            className="w-full bg-blue-600 text-white text-xs font-bold py-1.5 rounded hover:bg-blue-700"
+          >
+            Add Record
+          </button>
+        </div>
+      )}
 
         {emissionsLoading ? (
           <div className="flex items-center gap-2 text-sm text-slate-400 italic py-4">

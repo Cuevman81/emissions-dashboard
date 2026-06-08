@@ -134,7 +134,8 @@ export type DashboardAction =
   | { type: 'MONITOR_CLOSED' }
   | { type: 'CLEAR_MAP_PIN' }
   | { type: 'DESELECT_FACILITY' }
-  | { type: 'DESELECT_MONITOR' };
+  | { type: 'DESELECT_MONITOR' }
+  | { type: 'MONITOR_SELECTED'; payload: AqsMonitor };
 
 // ─── Reducer ───────────────────────────────────────────────────────
 function dashboardReducer(state: DashboardState, action: DashboardAction): DashboardState {
@@ -280,6 +281,14 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
         ...state,
         selectedMonitor: null,
         activeTab: 'inventory',
+      };
+
+    case 'MONITOR_SELECTED':
+      return {
+        ...state,
+        selectedFacility: null,
+        selectedMonitor: action.payload,
+        neiData: null,
       };
 
     default:

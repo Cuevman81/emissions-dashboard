@@ -190,12 +190,12 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
             <table className="w-full text-[10px]">
               <thead className="bg-purple-50/50 border-b border-slate-200">
                 <tr>
-                  <th className="px-3 py-2 text-left font-bold text-slate-500">Site</th>
-                  <th className="px-3 py-2 text-left font-bold text-slate-500">County</th>
-                  <th className="px-3 py-2 text-right font-bold text-purple-600">Annual DV</th>
-                  <th className="px-3 py-2 text-center font-bold text-slate-400">Status</th>
-                  <th className="px-3 py-2 text-right font-bold text-purple-600">24-hr DV</th>
-                  <th className="px-3 py-2 text-center font-bold text-slate-400">Status</th>
+                  <th scope="col" className="px-3 py-2 text-left font-bold text-slate-500">Site</th>
+                  <th scope="col" className="px-3 py-2 text-left font-bold text-slate-500">County</th>
+                  <th scope="col" className="px-3 py-2 text-right font-bold text-purple-600">Annual DV</th>
+                  <th scope="col" className="px-3 py-2 text-center font-bold text-slate-400">Status</th>
+                  <th scope="col" className="px-3 py-2 text-right font-bold text-purple-600">24-hr DV</th>
+                  <th scope="col" className="px-3 py-2 text-center font-bold text-slate-400">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -250,13 +250,13 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
           <table className="w-full text-[10px]">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-3 py-2 text-left font-bold text-slate-500">Pollutant</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-500">Site</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-500">County</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-500">Metric</th>
-                <th className="px-3 py-2 text-right font-bold text-slate-500">DV</th>
-                <th className="px-3 py-2 text-right font-bold text-slate-500">NAAQS</th>
-                <th className="px-3 py-2 text-center font-bold text-slate-500">Status</th>
+                <th scope="col" className="px-3 py-2 text-left font-bold text-slate-500">Pollutant</th>
+                <th scope="col" className="px-3 py-2 text-left font-bold text-slate-500">Site</th>
+                <th scope="col" className="px-3 py-2 text-left font-bold text-slate-500">County</th>
+                <th scope="col" className="px-3 py-2 text-left font-bold text-slate-500">Metric</th>
+                <th scope="col" className="px-3 py-2 text-right font-bold text-slate-500">DV</th>
+                <th scope="col" className="px-3 py-2 text-right font-bold text-slate-500">NAAQS</th>
+                <th scope="col" className="px-3 py-2 text-center font-bold text-slate-500">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -322,11 +322,11 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
             <table className="w-full text-[9px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-2 py-1.5 text-left font-bold text-slate-500">Site</th>
-                  <th className="px-2 py-1.5 text-left font-bold text-slate-500">Pollutant</th>
-                  <th className="px-2 py-1.5 text-center font-bold text-slate-500">Year</th>
-                  <th className="px-2 py-1.5 text-center font-bold text-slate-500">Q</th>
-                  <th className="px-2 py-1.5 text-right font-bold text-slate-500">Obs %</th>
+                  <th scope="col" className="px-2 py-1.5 text-left font-bold text-slate-500">Site</th>
+                  <th scope="col" className="px-2 py-1.5 text-left font-bold text-slate-500">Pollutant</th>
+                  <th scope="col" className="px-2 py-1.5 text-center font-bold text-slate-500">Year</th>
+                  <th scope="col" className="px-2 py-1.5 text-center font-bold text-slate-500">Q</th>
+                  <th scope="col" className="px-2 py-1.5 text-right font-bold text-slate-500">Obs %</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">

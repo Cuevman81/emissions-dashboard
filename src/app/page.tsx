@@ -374,7 +374,16 @@ export default function EmissionsDashboard() {
             </div>
 
             <div className="flex flex-col items-center md:items-end gap-6">
-              <img src="/MDEQ_Logo.gif" alt="MDEQ Logo" className="h-16 w-auto object-contain" />
+              <a
+                href="https://opcgis.deq.state.ms.us/ensearchonline/"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Go to MDEQ enSearch Online"
+                aria-label="MDEQ enSearch Online"
+                className="hover:opacity-90 transition-opacity"
+              >
+                <img src="/MDEQ_Logo.gif" alt="MDEQ Logo" className="h-16 w-auto object-contain" />
+              </a>
               <div className="flex flex-wrap items-center justify-center md:justify-end gap-4 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
                 <div className="flex flex-col items-end">
                   <label htmlFor="state-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">State</label>

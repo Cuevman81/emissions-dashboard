@@ -201,7 +201,7 @@ export default function PsdTab({
                 <div>
                   <span className="font-bold">Data Source Note:</span> For electricity generating units (EGUs),
                   SO₂ and NOₓ values are fetched live from <span className="font-semibold">EPA CAMD ({emissionsYear || '2023-2025'})</span>.
-                  PM, VOC, CO, and Lead values are populated from the <span className="font-semibold">2020 NEI</span>.
+                  PM, VOC, CO, and Lead values are populated from the <span className="font-semibold">{neiYear} NEI</span>.
                 </div>
               </div>
             )}

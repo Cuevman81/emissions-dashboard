@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getXlsxLatestYear, getXlsxDesignValues } from '@/lib/epa-dv-reports';
 
 const ARCGIS_BASE = 'https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/Air_Quality_Design_Values_for_Criteria_Pollutants/FeatureServer';
 const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
@@ -471,20 +472,10 @@ function processCO(co1hrRecords: any[], co8hrRecords: any[], co1hrAll: any[], co
   return { dvs, trends, completeness: [] };
 }
 
-let cachedLatestYear: number | null = null;
-let cachedLatestYearTime = 0;
-const LATEST_YEAR_CACHE_TTL = 60 * 60 * 1000; // 1 hour
-
-async function getLatestAvailableYear(): Promise<number> {
-  const now = Date.now();
-  if (cachedLatestYear && (now - cachedLatestYearTime < LATEST_YEAR_CACHE_TTL)) {
-    return cachedLatestYear;
-  }
-
+async function getArcgisLatestYear(): Promise<number | null> {
   const layerId = 1; // Ozone (representative criteria pollutant)
-  const where = '1=1';
   const params = new URLSearchParams({
-    where,
+    where: '1=1',
     outFields: 'DVYearText',
     orderByFields: 'DVYearText DESC',
     resultRecordCount: '1',
@@ -499,21 +490,107 @@ async function getLatestAvailableYear(): Promise<number> {
       const features = data.features || [];
       if (features.length > 0 && features[0].attributes?.DVYearText) {
         const yr = parseInt(features[0].attributes.DVYearText);
-        if (!isNaN(yr) && yr >= 2024) {
-          cachedLatestYear = yr;
-          cachedLatestYearTime = now;
-          return yr;
-        }
+        if (!isNaN(yr) && yr >= 2024) return yr;
       }
     }
   } catch (err) {
-    console.error('[NAAQS] Failed to fetch latest year from FeatureServer, using fallback:', err);
+    console.error('[NAAQS] Failed to fetch latest year from FeatureServer:', err);
+  }
+  return null;
+}
+
+let cachedLatestYear: number | null = null;
+let cachedXlsxLatestYear: number | null = null;
+let cachedLatestYearTime = 0;
+const LATEST_YEAR_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+// The latest available year is the newest the app can serve. EPA's official xlsx
+// reports lead the ArcGIS FeatureServer, so we take whichever is newer.
+async function getLatestYears(): Promise<{ latestYear: number; xlsxYear: number | null }> {
+  const now = Date.now();
+  if (cachedLatestYear && now - cachedLatestYearTime < LATEST_YEAR_CACHE_TTL) {
+    return { latestYear: cachedLatestYear, xlsxYear: cachedXlsxLatestYear };
   }
 
-  if (cachedLatestYear) {
-    return cachedLatestYear;
-  }
-  return 2024; // Absolute fallback
+  const [xlsxYear, arcgisYear] = await Promise.all([getXlsxLatestYear(), getArcgisLatestYear()]);
+  const latestYear = Math.max(xlsxYear ?? 0, arcgisYear ?? 0) || 2024;
+
+  cachedLatestYear = latestYear;
+  cachedXlsxLatestYear = xlsxYear;
+  cachedLatestYearTime = now;
+  return { latestYear, xlsxYear };
+}
+
+function dedupeTrends(allTrends: TrendPoint[]): TrendPoint[] {
+  const seen = new Set<string>();
+  return allTrends.filter(t => {
+    const key = `${t.siteId}_${t.pollutant}_${t.metric}_${t.year}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// Query every ArcGIS layer for a given design-value year: current-year DVs +
+// full history for trends. Used for historical years and as the fallback source.
+async function buildFromArcgis(stateName: string, endYear: number) {
+  const dvYear = String(endYear);
+  const [
+    o3Cur, o3All,
+    pm25_24Cur, pm25_24All,
+    pm25_annCur, pm25_annAll,
+    pm10Cur, pm10All,
+    no2_annCur, no2_annAll,
+    no2_1hrCur, no2_1hrAll,
+    so2Cur, so2All,
+    co1hrCur, co1hrAll,
+    co8hrCur, co8hrAll,
+  ] = await Promise.all([
+    queryLayer(1, stateName, dvYear), queryLayer(1, stateName),   // O3
+    queryLayer(3, stateName, dvYear), queryLayer(3, stateName),   // PM2.5 24-hr
+    queryLayer(4, stateName, dvYear), queryLayer(4, stateName),   // PM2.5 Annual
+    queryLayer(2, stateName, dvYear), queryLayer(2, stateName),   // PM10
+    queryLayer(9, stateName, dvYear), queryLayer(9, stateName),   // NO2 Annual
+    queryLayer(10, stateName, dvYear), queryLayer(10, stateName), // NO2 1-hr
+    queryLayer(6, stateName, dvYear), queryLayer(6, stateName),   // SO2
+    queryLayer(7, stateName, dvYear), queryLayer(7, stateName),   // CO 1-hr
+    queryLayer(8, stateName, dvYear), queryLayer(8, stateName),   // CO 8-hr
+  ]);
+
+  const o3 = processO3(o3Cur, o3All);
+  const pm25_24 = processPM25_24hr(pm25_24Cur, pm25_24All);
+  const pm25_ann = processPM25_annual(pm25_annCur, pm25_annAll);
+  const pm10 = processPM10(pm10Cur, pm10All);
+  const no2_ann = processNO2_annual(no2_annCur, no2_annAll);
+  const no2_1hr = processNO2_1hr(no2_1hrCur, no2_1hrAll);
+  const so2 = processSO2(so2Cur, so2All);
+  const co = processCO(co1hrCur, co8hrCur, co1hrAll, co8hrAll);
+
+  return {
+    designValues: [...o3.dvs, ...pm25_24.dvs, ...pm25_ann.dvs, ...pm10.dvs, ...no2_ann.dvs, ...no2_1hr.dvs, ...so2.dvs, ...co.dvs],
+    trends: [...o3.trends, ...pm25_24.trends, ...pm25_ann.trends, ...pm10.trends, ...no2_ann.trends, ...no2_1hr.trends, ...so2.trends, ...co.trends],
+    completeness: [...o3.completeness, ...pm25_24.completeness, ...pm25_ann.completeness, ...pm10.completeness],
+  };
+}
+
+// Query ArcGIS history only (no current-year filter) to get the 10-year trend
+// series. Used by the xlsx path so the trend charts keep their long history.
+async function getArcgisTrends(stateName: string): Promise<TrendPoint[]> {
+  const [o3All, pm25_24All, pm25_annAll, pm10All, no2_annAll, no2_1hrAll, so2All, co1hrAll, co8hrAll] = await Promise.all([
+    queryLayer(1, stateName), queryLayer(3, stateName), queryLayer(4, stateName),
+    queryLayer(2, stateName), queryLayer(9, stateName), queryLayer(10, stateName),
+    queryLayer(6, stateName), queryLayer(7, stateName), queryLayer(8, stateName),
+  ]);
+  return [
+    ...processO3([], o3All).trends,
+    ...processPM25_24hr([], pm25_24All).trends,
+    ...processPM25_annual([], pm25_annAll).trends,
+    ...processPM10([], pm10All).trends,
+    ...processNO2_annual([], no2_annAll).trends,
+    ...processNO2_1hr([], no2_1hrAll).trends,
+    ...processSO2([], so2All).trends,
+    ...processCO([], [], co1hrAll, co8hrAll).trends,
+  ];
 }
 
 export async function GET(request: Request) {
@@ -525,91 +602,70 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `Invalid state: ${state}` }, { status: 400 });
   }
 
-  const latestYear = await getLatestAvailableYear();
+  const { latestYear, xlsxYear } = await getLatestYears();
   const endYearParam = searchParams.get('endYear');
   let endYear: number;
   if (!endYearParam || endYearParam === 'undefined' || endYearParam === 'null') {
     endYear = latestYear;
   } else {
     endYear = parseInt(endYearParam);
-    if (isNaN(endYear)) {
-      endYear = latestYear;
-    }
+    if (isNaN(endYear)) endYear = latestYear;
   }
 
-  const resultCacheKey = `naaqs_arcgis_${state}_${endYear}.json`;
+  // Prefer EPA's official xlsx reports for any year they cover (they lead ArcGIS).
+  const useXlsx = xlsxYear != null && endYear === xlsxYear;
+  const resultCacheKey = `naaqs_${useXlsx ? 'xlsx' : 'arcgis'}_${state}_${endYear}.json`;
   const resultCachePath = path.join(CACHE_DIR, resultCacheKey);
   if (fs.existsSync(resultCachePath)) {
     const stats = fs.statSync(resultCachePath);
     if (Date.now() - stats.mtimeMs < CACHE_TTL) {
-      console.log(`[NAAQS] Cache hit: ${state}/${endYear}`);
+      console.log(`[NAAQS] Cache hit (${useXlsx ? 'xlsx' : 'arcgis'}): ${state}/${endYear}`);
       try {
         const cachedData = JSON.parse(fs.readFileSync(resultCachePath, 'utf8'));
-        // Ensure latestYear is injected in cached responses
-        cachedData.latestYear = latestYear;
+        cachedData.latestYear = latestYear; // keep latestYear fresh in cached responses
         return NextResponse.json(cachedData);
-      } catch { /* parse error, fallback to refetching */ }
+      } catch { /* parse error, fall through to refetch */ }
     }
   }
 
+  let source: 'xlsx' | 'arcgis' = useXlsx ? 'xlsx' : 'arcgis';
   try {
-    const dvYear = String(endYear);
+    let designValues, trends, completeness;
 
-    // Query all layers in parallel: current-year DVs + full history for trends
-    const [
-      o3Cur, o3All,
-      pm25_24Cur, pm25_24All,
-      pm25_annCur, pm25_annAll,
-      pm10Cur, pm10All,
-      no2_annCur, no2_annAll,
-      no2_1hrCur, no2_1hrAll,
-      so2Cur, so2All,
-      co1hrCur, co1hrAll,
-      co8hrCur, co8hrAll,
-    ] = await Promise.all([
-      queryLayer(1, stateName, dvYear), queryLayer(1, stateName),   // O3
-      queryLayer(3, stateName, dvYear), queryLayer(3, stateName),   // PM2.5 24-hr
-      queryLayer(4, stateName, dvYear), queryLayer(4, stateName),   // PM2.5 Annual
-      queryLayer(2, stateName, dvYear), queryLayer(2, stateName),   // PM10
-      queryLayer(9, stateName, dvYear), queryLayer(9, stateName),   // NO2 Annual
-      queryLayer(10, stateName, dvYear), queryLayer(10, stateName), // NO2 1-hr
-      queryLayer(6, stateName, dvYear), queryLayer(6, stateName),   // SO2
-      queryLayer(7, stateName, dvYear), queryLayer(7, stateName),   // CO 1-hr
-      queryLayer(8, stateName, dvYear), queryLayer(8, stateName),   // CO 8-hr
-    ]);
+    if (useXlsx) {
+      try {
+        // Official EPA report (primary) + ArcGIS for the long trend history.
+        const [xlsx, historyTrends] = await Promise.all([
+          getXlsxDesignValues(stateName, endYear),
+          getArcgisTrends(stateName),
+        ]);
+        designValues = xlsx.dvs;
+        completeness = xlsx.completeness;
+        trends = [...historyTrends, ...xlsx.trendPoints];
+      } catch (xlsxErr: any) {
+        // Graceful fallback: serve whatever ArcGIS has for this year.
+        console.error(`[NAAQS] xlsx ingestion failed for ${state}/${endYear}, falling back to ArcGIS:`, xlsxErr.message);
+        source = 'arcgis';
+        const arc = await buildFromArcgis(stateName, endYear);
+        ({ designValues, trends, completeness } = arc);
+      }
+    } else {
+      const arc = await buildFromArcgis(stateName, endYear);
+      ({ designValues, trends, completeness } = arc);
+    }
 
-    const o3 = processO3(o3Cur, o3All);
-    const pm25_24 = processPM25_24hr(pm25_24Cur, pm25_24All);
-    const pm25_ann = processPM25_annual(pm25_annCur, pm25_annAll);
-    const pm10 = processPM10(pm10Cur, pm10All);
-    const no2_ann = processNO2_annual(no2_annCur, no2_annAll);
-    const no2_1hr = processNO2_1hr(no2_1hrCur, no2_1hrAll);
-    const so2 = processSO2(so2Cur, so2All);
-    const co = processCO(co1hrCur, co8hrCur, co1hrAll, co8hrAll);
-
-    const allDvs = [...o3.dvs, ...pm25_24.dvs, ...pm25_ann.dvs, ...pm10.dvs, ...no2_ann.dvs, ...no2_1hr.dvs, ...so2.dvs, ...co.dvs];
-    const allTrends = [...o3.trends, ...pm25_24.trends, ...pm25_ann.trends, ...pm10.trends, ...no2_ann.trends, ...no2_1hr.trends, ...so2.trends, ...co.trends];
-    const allCompleteness = [...o3.completeness, ...pm25_24.completeness, ...pm25_ann.completeness, ...pm10.completeness];
-
-    // Deduplicate trends
-    const seen = new Set<string>();
-    const dedupedTrends = allTrends.filter(t => {
-      const key = `${t.siteId}_${t.pollutant}_${t.metric}_${t.year}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    const result = { designValues: allDvs, trends: dedupedTrends, completeness: allCompleteness, state, endYear, latestYear };
+    const result = { designValues, trends: dedupeTrends(trends), completeness, state, endYear, latestYear, source };
 
     try {
-      fs.writeFileSync(resultCachePath, JSON.stringify(result), 'utf8');
-      console.log(`[NAAQS] Cached: ${allDvs.length} DVs, ${dedupedTrends.length} trends for ${state}/${endYear}`);
+      // Cache under the source actually used (avoids caching an arcgis-fallback under the xlsx key).
+      const writeKey = `naaqs_${source}_${state}_${endYear}.json`;
+      fs.writeFileSync(path.join(CACHE_DIR, writeKey), JSON.stringify(result), 'utf8');
+      console.log(`[NAAQS] Cached (${source}): ${result.designValues.length} DVs, ${result.trends.length} trends for ${state}/${endYear}`);
     } catch { /* ignore */ }
 
     return NextResponse.json(result);
   } catch (err: any) {
-    console.error('[NAAQS] ArcGIS query failed:', err.message);
-    return NextResponse.json({ error: err.message, designValues: [], trends: [], completeness: [], state, endYear, latestYear }, { status: 500 });
+    console.error('[NAAQS] query failed:', err.message);
+    return NextResponse.json({ error: err.message, designValues: [], trends: [], completeness: [], state, endYear, latestYear, source }, { status: 500 });
   }
 }

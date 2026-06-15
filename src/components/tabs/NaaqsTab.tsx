@@ -24,6 +24,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
   const [loading, setLoading] = useState(true);
   const [endYear, setEndYear] = useState<number | undefined>(undefined);
   const [latestYear, setLatestYear] = useState<number>(2024);
+  const [source, setSource] = useState<'xlsx' | 'arcgis' | undefined>(undefined);
   const [pollutantFilter, setPollutantFilter] = useState<string>('All');
   const [showCompleteness, setShowCompleteness] = useState(false);
   const [showTrends, setShowTrends] = useState(true);
@@ -37,6 +38,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       setTrends(result.trends);
       setCompleteness(result.completeness);
       setLatestYear(result.latestYear || result.endYear || 2024);
+      setSource(result.source);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -472,7 +474,9 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       </div>
 
       <p className="text-[8px] text-slate-300 text-center mt-4">
-        Source: EPA Air Quality Design Values Report · ArcGIS FeatureServer · {selectedState} {endYear || latestYear}
+        Source: {source === 'xlsx'
+          ? 'EPA Official Design Value Report (xlsx)'
+          : 'EPA Air Quality Design Values · ArcGIS FeatureServer'} · {selectedState} {endYear || latestYear}
       </p>
     </div>
   );

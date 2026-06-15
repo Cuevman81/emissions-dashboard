@@ -368,6 +368,7 @@ export interface NaaqsResult {
   state: string;
   endYear: number;
   latestYear?: number;
+  source?: 'xlsx' | 'arcgis';
 }
 
 /**

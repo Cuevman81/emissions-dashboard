@@ -142,14 +142,20 @@ async function main() {
           console.warn(`[ECHO] API returned warning/error: ${results.Error.ErrorMessage || JSON.stringify(results.Error)}`);
         } else {
           const totalFound = parseInt(results.TotalFacilitiesFound || results.QueryRows || '0');
-          const baselineCount = 1147;
+          // This is the raw ECHO *active* count, which EPA churns by a handful
+          // day-to-day (e.g. 1022 <-> 1025). The dashboard itself is live-sourced
+          // (active ECHO + merged TRI facilities), so it self-updates regardless.
+          // We therefore only flag a *material* roster shift, not normal drift.
+          const baselineCount = 1025;
+          const tolerance = 0.03; // 3% (~30 facilities)
+          const drift = baselineCount > 0 ? Math.abs(totalFound - baselineCount) / baselineCount : 0;
           console.log(`[ECHO] Remote Active Facilities Found: ${totalFound}`);
-          console.log(`[ECHO] Local Baseline Facilities Count: ${baselineCount}`);
-          if (totalFound > 0 && totalFound !== baselineCount) {
+          console.log(`[ECHO] Local Baseline Facilities Count: ${baselineCount} (tolerance ±${Math.round(tolerance * 100)}%)`);
+          if (totalFound > 0 && drift > tolerance) {
             updateNeeded = true;
-            updateMessages.push(`- **ECHO Facility Inventory Update Available**: The active facilities count in ECHO has changed.\n  * Local Baseline: \`${baselineCount}\` facilities\n  * Remote Current: \`${totalFound}\` facilities`);
+            updateMessages.push(`- **ECHO Facility Inventory Update Available**: The active facilities count in ECHO has shifted materially (>${Math.round(tolerance * 100)}% from baseline).\n  * Local Baseline: \`${baselineCount}\` facilities\n  * Remote Current: \`${totalFound}\` facilities\n  * The dashboard is live-sourced and reflects this automatically; update this baseline if the new level is expected.`);
           } else {
-            console.log('[ECHO] Facility inventory count is up-to-date.');
+            console.log('[ECHO] Facility inventory count is within tolerance.');
           }
         }
       } else {

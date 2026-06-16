@@ -153,13 +153,24 @@ try {
   console.warn('[Cache] Failed to ensure cache directory exists:', err);
 }
 
+// Hard ceiling on the whole ECHO attempt. Serverless cold starts have no warm
+// cache, so a slow/unreachable ECHO must fail FAST and let us serve the seed
+// file — the client aborts the request at 20s (see page.tsx), so we must stay
+// well under that. Bounding the total attempt (not just per-request) prevents
+// sequential pagination from silently blowing the budget.
+const ECHO_TOTAL_BUDGET_MS = 12000;
+
 async function fetchFromECHO(state: string) {
+  const deadline = Date.now() + ECHO_TOTAL_BUDGET_MS;
+  // Remaining budget, floored so we never hand AbortSignal.timeout a tiny/negative value.
+  const remaining = () => Math.max(1500, deadline - Date.now());
+
   // Step 1: Initiate ECHO air facility search to get QueryID
   const searchUrl = `${ECHO_BASE}/air_rest_services.get_facilities?p_st=${state}&p_act=Y&output=JSON`;
-  
-  console.log(`[ECHO API] Starting search for ${state}...`);
+
+  console.log(`[ECHO API] Starting search for ${state} (budget ${ECHO_TOTAL_BUDGET_MS}ms)...`);
   const searchRes = await fetch(searchUrl, {
-    signal: AbortSignal.timeout(45000), // Increased to 45s
+    signal: AbortSignal.timeout(remaining()),
     headers: { 'Accept': 'application/json' },
   });
   if (!searchRes.ok) throw new Error(`ECHO search: ${searchRes.status}`);
@@ -187,9 +198,14 @@ async function fetchFromECHO(state: string) {
   console.log(`[ECHO API] Paginating ${totalFound} facilities via QID: ${queryId}`);
 
   for (let page = 1; page <= maxPages; page++) {
+    // Stop paginating if we've burned the budget; serve whatever we collected.
+    if (Date.now() >= deadline) {
+      console.warn(`[ECHO API] Budget exhausted after page ${page - 1}; returning partial.`);
+      break;
+    }
     const qidUrl = `${ECHO_BASE}/air_rest_services.get_qid?qid=${queryId}&pageno=${page}&numrows=${perPage}&output=JSON`;
     const qidRes = await fetch(qidUrl, {
-      signal: AbortSignal.timeout(30000), // Increased to 30s per page
+      signal: AbortSignal.timeout(remaining()),
       headers: { 'Accept': 'application/json' },
     });
     if (!qidRes.ok) break;

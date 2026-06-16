@@ -97,7 +97,10 @@ export default function EmissionsDashboard() {
     dispatch({ type: 'RESET_FOR_STATE_CHANGE' });
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    // Headroom over the server's bounded ECHO budget (~12s) plus cold-start
+    // overhead (module init + seed-file read) so a Vercel cold start never gets
+    // aborted mid-flight and falls back to an empty roster.
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     fetch(`/api/facilities?state=${selectedState}&v=1.0.2`, { signal: controller.signal })
       .then(res => { clearTimeout(timeoutId); if (!res.ok) throw new Error('API Response Error'); return res.json(); })

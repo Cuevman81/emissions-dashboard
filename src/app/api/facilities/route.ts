@@ -335,6 +335,10 @@ function attachNei2023Flags(facilities: any[]) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = (searchParams.get('state') || 'MS').toUpperCase();
+  // Validate before using in file paths (cache key) — prevents path traversal
+  if (!/^[A-Z]{2}$/.test(state)) {
+    return jsonResponse({ error: `Invalid state: ${state}` }, 400);
+  }
   const cachePath = path.join(CACHE_DIR, `facilities_${state}.json`);
 
   try {

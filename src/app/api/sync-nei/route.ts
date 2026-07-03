@@ -27,6 +27,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Use POST to trigger sync' }, { status: 405 });
   }
 
+  // On Vercel the bundled dataset is immutable (read-only filesystem) — updates
+  // arrive via the daily GitHub Action + redeploy. Report up-to-date so clients
+  // never auto-trigger a sync that cannot succeed.
+  if (process.env.VERCEL) {
+    return NextResponse.json({
+      updateAvailable: false,
+      databaseExists: fs.existsSync(DATA_PATH),
+      note: 'Serverless deployment: NEI updates are applied via scheduled rebuilds.',
+    });
+  }
+
   try {
     const headRes = await fetch(ZIP_URL, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
     if (!headRes.ok) throw new Error(`GAFTP HEAD request returned ${headRes.status}`);
@@ -61,6 +72,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST() {
+  // Read-only filesystem on Vercel — the sync can never persist. Refuse early
+  // instead of downloading a ~100MB zip per (unauthenticated) request.
+  if (process.env.VERCEL) {
+    return NextResponse.json(
+      { success: false, error: 'NEI sync is not supported on serverless deployments.' },
+      { status: 501 }
+    );
+  }
+
   try {
     console.log('[Sync Process] Checking headers first...');
     const headRes = await fetch(ZIP_URL, { method: 'HEAD', signal: AbortSignal.timeout(10000) });

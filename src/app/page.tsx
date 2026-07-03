@@ -225,29 +225,37 @@ export default function EmissionsDashboard() {
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eisIds, triIds, mode, year: mapTriYear })
+        body: JSON.stringify({ eisIds, triIds, mode, year: mapTriYear, neiYear })
       });
       if (res.ok) enrichedData = await res.json();
     } catch (err) { console.warn('Export enrichment failed:', err); }
+
+    // Escape embedded quotes and neutralize leading formula characters (=,+,-,@)
+    // so exported names can't break rows or execute as formulas in Excel.
+    const csvField = (v: string) => {
+      let s = (v || '').replace(/"/g, '""');
+      if (/^[=+\-@]/.test(s)) s = `'${s}`;
+      return `"${s}"`;
+    };
 
     const baseHeaders = ['Name', 'Registry_ID', 'TRI_ID', 'EIS_ID', 'Address', 'City', 'State', 'Permit_Type', 'Major_Source', 'HPV', 'Latitude', 'Longitude', 'Distance_mi'];
     let headers = [...baseHeaders];
     if (mode === 'PSD') {
       headers.push('NOx (TPY)', 'SO2 (TPY)', 'PM2.5 (TPY)', 'VOC (TPY)', 'CO (TPY)', 'Data_Source');
     } else {
-      headers.push('Total_HAPs (lbs)', 'HAP_Count', 'Reporting_Year', 'HAPs_Inventory', 'Data_Source');
+      headers.push('Total_HAPs (tons)', 'HAP_Count', 'Reporting_Year', 'HAPs_Inventory', 'Data_Source');
     }
 
     const csvContent = [
       headers.join(','),
       ...proximityFacilities.map(f => {
-        const row = [`"${f.name}"`, f.id, f.triId || '', f.eisId || '', `"${f.address}"`, f.city, f.state, f.permitType || '', f.isMajor ? 'Y' : 'N', f.hasHpv ? 'Y' : 'N', f.lat, f.lon, f.distance?.toFixed(2)];
+        const row = [csvField(f.name), f.id, f.triId || '', f.eisId || '', csvField(f.address), csvField(f.city), f.state, f.permitType || '', f.isMajor ? 'Y' : 'N', f.hasHpv ? 'Y' : 'N', f.lat, f.lon, f.distance?.toFixed(2)];
         if (mode === 'PSD') {
           const d = enrichedData[f.eisId || ''] || {};
-          row.push(d.nox || '', d.so2 || '', d.pm25 || '', d.voc || '', d.co || '', d.nox !== undefined ? 'NEI 2020' : '');
+          row.push(d.nox || '', d.so2 || '', d.pm25 || '', d.voc || '', d.co || '', d.nox !== undefined ? `NEI ${neiYear}` : '');
         } else {
           const d = enrichedData[f.triId || ''] || {};
-          row.push(d.totalHaps !== undefined ? d.totalHaps.toFixed(4) : '', d.hapCount || '', d.year || '', d.hapsList ? `"${d.hapsList}"` : '', d.totalHaps !== undefined ? 'TRI' : '');
+          row.push(d.totalHaps !== undefined ? d.totalHaps.toFixed(4) : '', d.hapCount || '', d.year || '', d.hapsList ? csvField(d.hapsList) : '', d.totalHaps !== undefined ? 'TRI' : '');
         }
         return row.join(',');
       })
@@ -260,7 +268,7 @@ export default function EmissionsDashboard() {
     const filterSuffix = mapFilter !== 'all' ? `_filter_${mapFilter}` : '_all_sources';
     link.download = `${selectedState.toLowerCase()}_${mode.toLowerCase()}_export_${radiusMi}mi${filterSuffix}.csv`;
     link.click();
-  }, [proximityFacilities, activeTab, mapTriYear, mapFilter, selectedState, radiusMi]);
+  }, [proximityFacilities, activeTab, mapTriYear, neiYear, mapFilter, selectedState, radiusMi]);
 
   const handleClassIToggle = useCallback(async () => {
     const next = !showClassI;

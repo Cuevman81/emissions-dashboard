@@ -94,8 +94,11 @@ export async function GET(request: Request) {
     return NextResponse.json(localData);
   }
 
-  // Try cache lookup for live fallback
-  const cacheKey = `haps_${triId}_${yearParam || 'latest'}.json`;
+  // Try cache lookup for live fallback.
+  // Sanitize path components — triId/year are user-controlled (path traversal guard).
+  const safeTriId = triId.replace(/[^A-Za-z0-9 &-]/g, '_');
+  const safeYear = (yearParam || 'latest').replace(/[^A-Za-z0-9]/g, '_');
+  const cacheKey = `haps_${safeTriId}_${safeYear}.json`;
   const cachePath = path.join(CACHE_DIR, cacheKey);
 
   if (fs.existsSync(cachePath)) {

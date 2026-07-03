@@ -67,7 +67,9 @@ async function fetchHistoricalCamdEmissions(orisCode: string): Promise<Record<st
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const registryId = searchParams.get('registryId') || 'unknown';
-  const camdId = searchParams.get('camdId') || '';
+  const camdIdRaw = searchParams.get('camdId') || '';
+  // ORIS codes are numeric — validate before using in URLs and file paths
+  const camdId = /^\d+$/.test(camdIdRaw) ? camdIdRaw : '';
 
   // EGU path — real CEMS data from CAMPD
   if (camdId) {

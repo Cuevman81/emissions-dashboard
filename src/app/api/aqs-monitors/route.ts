@@ -31,8 +31,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = searchParams.get('state');
   const mode = searchParams.get('mode') || 'monitors';
-  const monitorId = searchParams.get('monitorId'); // formatted as state_code + county_code + site_number
-  const year = searchParams.get('year') || '2023';
+  // Monitor ID is state_code(2) + county_code(3) + site_number — digits only.
+  // Validated because it flows into cache file paths and the EPA request URL.
+  const monitorIdRaw = searchParams.get('monitorId');
+  const monitorId = monitorIdRaw && /^\d{7,12}$/.test(monitorIdRaw) ? monitorIdRaw : null;
+  const yearRaw = searchParams.get('year') || '2023';
+  const year = /^\d{4}$/.test(yearRaw) ? yearRaw : '2023';
   const refresh = searchParams.get('refresh') === 'true';
 
   const DEBUG_LOG = 'aqs_debug.log';

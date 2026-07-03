@@ -13,11 +13,46 @@ const NEI_SERVICE = 'https://services.arcgis.com/cJ9YHowT8TU7DUyn/arcgis/rest/se
 
 export async function POST(request: Request) {
     try {
-        const { eisIds, triIds, mode, year } = await request.json();
+        const { eisIds: rawEisIds, triIds: rawTriIds, mode, year, neiYear } = await request.json();
+
+        // Sanitize IDs — they are interpolated into an ArcGIS where-clause and used
+        // as object keys. EIS IDs are numeric; TRI IDs are alphanumeric EPA codes.
+        const eisIds = Array.isArray(rawEisIds)
+            ? rawEisIds.filter((id: any) => typeof id === 'string' && /^\d+$/.test(id)).slice(0, 2000)
+            : [];
+        const triIds = Array.isArray(rawTriIds)
+            ? rawTriIds.filter((id: any) => typeof id === 'string' && /^[A-Za-z0-9 &-]+$/.test(id)).slice(0, 2000)
+            : [];
 
         const results: Record<string, any> = {};
 
-        // 1. Resolve NEI 2020 Data (Bulk ArcGIS Query)
+        // 1a. Resolve NEI 2023 data from the local store (preferred when toggled)
+        if (mode === 'PSD' && neiYear === '2023' && eisIds.length > 0) {
+            const neiPath = path.join(process.cwd(), 'src', 'lib', 'nei_2023_MS.json');
+            if (fs.existsSync(neiPath)) {
+                const neiLocal = JSON.parse(fs.readFileSync(neiPath, 'utf8'));
+                eisIds.forEach((eisId: string) => {
+                    const fac = neiLocal[eisId];
+                    if (!fac?.emissions) return;
+                    let pm25 = 0, nox = 0, so2 = 0, voc = 0, co = 0;
+                    for (const e of fac.emissions) {
+                        const p = (e.pollutant || '').toUpperCase();
+                        if (p.includes('PM2.5') && p.includes('PRIMARY')) pm25 = e.amount;
+                        else if (p.includes('NITROGEN OXIDES')) nox = e.amount;
+                        else if (p.includes('SULFUR DIOXIDE')) so2 = e.amount;
+                        else if (p.includes('VOLATILE ORGANIC')) voc = e.amount;
+                        else if (p.includes('CARBON MONOXIDE')) co = e.amount;
+                    }
+                    if (pm25 || nox || so2 || voc || co) {
+                        results[eisId] = { pm25, nox, so2, voc, co };
+                    }
+                });
+                return NextResponse.json(results);
+            }
+            // Local 2023 store unavailable — fall through to NEI 2020 ArcGIS below
+        }
+
+        // 1b. Resolve NEI 2020 Data (Bulk ArcGIS Query)
         if (mode === 'PSD' && eisIds && eisIds.length > 0) {
             // ArcGIS 'IN' clauses have limits; we'll batch into chunks of 50 just in case
             const chunks = [];
@@ -65,8 +100,9 @@ export async function POST(request: Request) {
                     if (facilityData) {
                         const targetYear = (year && facilityData.years[year]) ? year : facilityData.latestYear;
                         const haps = facilityData.years[targetYear] || [];
+                        // Local TRI store amounts are stored in short tons (Tons/Year)
                         const totalHaps = haps.reduce((sum: number, h: any) => sum + h.amount, 0);
-                        const hapsList = haps.map((h: any) => `${h.pollutant}: ${h.amount} lbs`).join(' | ');
+                        const hapsList = haps.map((h: any) => `${h.pollutant}: ${h.amount} tons`).join(' | ');
 
                         results[triId] = {
                             totalHaps,

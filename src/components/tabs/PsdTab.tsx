@@ -312,7 +312,8 @@ export default function PsdTab({
               )}
             </div>
             <p className="text-[9px] text-slate-400 mb-2 leading-relaxed">
-              Compare against PSD Significant Emission Rates (40 CFR 52.21). Red = meets or exceeds significance threshold.
+              Compare against PSD Significant Emission Rates (40 CFR 52.21(b)(23)). Red = meets or exceeds significance threshold.
+              Screening aid only — SERs formally apply to a project&apos;s <em>emissions increase</em>, not existing facility-wide totals.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-[9px]">

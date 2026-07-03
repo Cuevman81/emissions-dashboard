@@ -16,6 +16,15 @@ try {
 }
 
 export async function GET() {
+  // Read-only filesystem on Vercel — synced data could never persist.
+  // TRI updates arrive via the daily GitHub Action + redeploy instead.
+  if (process.env.VERCEL) {
+    return NextResponse.json({
+      status: 'fresh',
+      message: 'Serverless deployment: TRI updates are applied via scheduled rebuilds.',
+    });
+  }
+
   try {
     let shouldCheck = true;
 

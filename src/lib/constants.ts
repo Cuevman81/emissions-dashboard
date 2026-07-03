@@ -14,14 +14,21 @@ export const US_STATES = [
   ['WV', 'West Virginia'], ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
 ] as const;
 
+// PSD Significant Emission Rates — 40 CFR 52.21(b)(23)(i), tons/year.
+// Note: PM (total) is 25 tpy, PM10 is 15 tpy, PM2.5 is 10 tpy direct.
 export const PSD_SER: Record<string, number> = {
   'CO': 100,
   'NOx': 40,
   'SO2': 40,
-  'PM10': 25,
+  'PM': 25,
+  'PM10': 15,
   'PM2.5': 10,
   'VOC': 40,
   'Lead': 0.6,
+  'H2SO4 Mist': 7,
+  'Fluorides': 3,
+  'H2S': 10,
+  'TRS': 10,
 };
 
 export function normalizePsdPollutant(name: string): string | null {
@@ -31,8 +38,16 @@ export function normalizePsdPollutant(name: string): string | null {
   if (n.includes('so2') || n.includes('sulfur diox')) return 'SO2';
   if (n.includes('pm2.5') || n.includes('pm 2.5') || n.includes('fine parti')) return 'PM2.5';
   if (n.includes('pm10') || n.includes('pm 10')) return 'PM10';
+  // PM (total) catch-all AFTER the size-specific checks. Excludes fraction-only
+  // records ("PM Condensible"/"Filterable") — those aren't a total-PM figure.
+  if ((n === 'pm' || n.startsWith('pm ') || n.includes('particulate') || n === 'tsp') &&
+      !n.includes('condens') && !n.includes('filterable')) return 'PM';
   if (n.includes('voc') || n.includes('volatile organic') || n.includes('nmhc')) return 'VOC';
   if (n.includes('lead') || n === 'pb') return 'Lead';
+  if (n.includes('sulfuric acid') || n.includes('h2so4')) return 'H2SO4 Mist';
+  if (n.includes('fluoride')) return 'Fluorides';
+  if (n.includes('hydrogen sulfide') || n === 'h2s') return 'H2S';
+  if (n.includes('total reduced sulfur') || n === 'trs') return 'TRS';
   return null;
 }
 

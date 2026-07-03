@@ -165,7 +165,9 @@ function getFallbackIndustryStacks(naics: string | null, sector: string | null):
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const registryId = searchParams.get('registryId');
-  const camdId = searchParams.get('camdId'); // ORIS code — present for EGU power plants
+  const camdIdRaw = searchParams.get('camdId'); // ORIS code — present for EGU power plants
+  // ORIS codes are numeric — validate before using in URLs and file paths
+  const camdId = camdIdRaw && /^\d+$/.test(camdIdRaw) ? camdIdRaw : null;
   const naics = searchParams.get('naics');
   const sector = searchParams.get('sector');
 
@@ -213,7 +215,7 @@ export async function GET(request: Request) {
   }
 
   // --- Path 2: Try NEI/EIS efservice (EIS_RELEASE_POINT) ---
-  const url = `https://data.epa.gov/efservice/EIS_RELEASE_POINT/FACILITY_REGISTRY_ID/equals/${registryId}/JSON`;
+  const url = `https://data.epa.gov/efservice/EIS_RELEASE_POINT/FACILITY_REGISTRY_ID/equals/${encodeURIComponent(registryId)}/JSON`;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
 

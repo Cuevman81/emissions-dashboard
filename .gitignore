@@ -41,3 +41,7 @@ src/cache/
 /src/logs
 .claude/
 /update_details.txt
+
+# R session artifacts
+.Rhistory
+.RData

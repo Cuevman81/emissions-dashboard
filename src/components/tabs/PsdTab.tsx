@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { Loader2, BarChart3, Database, ShieldAlert } from 'lucide-react';
+import { Loader2, BarChart3, Database, ShieldAlert, Mountain } from 'lucide-react';
 import { CamdTooltip } from '@/components/ChartTooltips';
 import StackInventory from '@/components/StackInventory';
-import { PSD_SER, normalizePsdPollutant } from '@/lib/constants';
+import { PSD_SER, normalizePsdPollutant, CLASS_I_AREAS_SC, haversineKm } from '@/lib/constants';
 import psdBaselinesData from '@/lib/psd_baselines.json';
 import {
   Facility,
@@ -356,6 +356,41 @@ export default function PsdTab({
               </table>
             </div>
             <p className="text-[8px] text-slate-300 mt-2">All values in TPY · SER = Significant Emission Rate · ⚠ = PSD significance triggered</p>
+
+            {/* Applicability Indicators — major source PTE threshold + GHG Step 2 */}
+            {(() => {
+              // PTE >= actuals, so actuals meeting the threshold conclusively make the
+              // source major. 100 tpy applies to the 28 listed source categories
+              // (approximated by sector); 250 tpy applies to everything else.
+              const listedCategory = !!selectedFacility.camdId ||
+                ['Power Plant', 'Refinery', 'Cement', 'Paper/Pulp', 'Steel', 'Chemical'].includes(selectedFacility.sector || '');
+              const majorThreshold = listedCategory ? 100 : 250;
+              const overMajor = serRows.filter(r => Math.max(r.actual ?? 0, r.pte ?? 0) >= majorThreshold).map(r => r.key);
+
+              const co2 = actualEmissions.find(e => /co2|carbon dioxide/i.test(e.pollutant));
+              const ghgOver = co2 ? co2.amount >= 75000 : false;
+
+              return (
+                <div className="mt-3 space-y-1.5">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Applicability Indicators</p>
+                  <div className={`rounded-lg border p-2 text-[9px] leading-relaxed ${overMajor.length > 0 ? 'bg-red-50/60 border-red-100 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                    <span className="font-bold">PSD Major Source ({majorThreshold} TPY{listedCategory ? ', listed category' : ''}):</span>{' '}
+                    {overMajor.length > 0
+                      ? <>{overMajor.join(', ')} actuals meet or exceed {majorThreshold} TPY — the source is major (PTE ≥ actuals).</>
+                      : <>No pollutant actuals reach {majorThreshold} TPY. PTE may still exceed it — confirm against permit limits.</>}
+                  </div>
+                  {co2 && (
+                    <div className={`rounded-lg border p-2 text-[9px] leading-relaxed ${ghgOver ? 'bg-amber-50/70 border-amber-100 text-amber-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                      <span className="font-bold">GHG (Step 2):</span>{' '}
+                      CO₂ actuals {co2.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })} TPY
+                      {ghgOver ? ' — at or above' : ' — below'} the 75,000 TPY CO₂e significance level.
+                      GHG BACT applies only to &quot;anyway sources&quot; already subject to PSD for a non-GHG pollutant (UARG v. EPA).
+                      CO₂e shown as CO₂ mass; CH₄/N₂O contributions from combustion are typically &lt;1%.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -482,6 +517,51 @@ export default function PsdTab({
         })()}
       </div>
 
+
+      {/* Class I Area Proximity — FLM notification screen (FLAG guidance ~300 km) */}
+      {(() => {
+        const areas = CLASS_I_AREAS_SC
+          .map(a => ({ ...a, km: haversineKm(selectedFacility.lat, selectedFacility.lon, a.lat, a.lon) }))
+          .sort((x, y) => x.km - y.km);
+        const within = areas.filter(a => a.km <= 300);
+        const shown = within.length > 0 ? within : areas.slice(0, 1);
+        return (
+          <div className="border-t border-slate-100 pt-5 mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <Mountain className="h-3 w-3" /> Class I Area Proximity
+              </h3>
+              {within.length > 0 ? (
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                  FLM Notification Zone
+                </span>
+              ) : (
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                  &gt;300 km
+                </span>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              {shown.map(a => (
+                <div key={a.name} className={`flex items-center justify-between p-2 rounded border text-[10px] ${a.km <= 300 ? 'bg-indigo-50/60 border-indigo-100' : 'bg-slate-50 border-slate-200'}`}>
+                  <div>
+                    <span className="font-bold text-slate-700">{a.name}</span>
+                    <span className="text-slate-400"> · {a.state} · {a.agency}</span>
+                  </div>
+                  <span className={`font-mono font-bold shrink-0 ml-2 ${a.km <= 300 ? 'text-indigo-700' : 'text-slate-400'}`}>
+                    {Math.round(a.km)} km
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[8px] text-slate-400 mt-2 leading-relaxed italic">
+              Per FLAG guidance, PSD applications for sources within ~300 km of a mandatory Class I area
+              should be shared with the Federal Land Manager for AQRV review. Distances are to a representative
+              interior point — boundary distances are shorter. Verify with the FLM during permitting.
+            </p>
+          </div>
+        );
+      })()}
 
       <StackInventory
         stacks={stacks}

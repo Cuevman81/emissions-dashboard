@@ -279,6 +279,10 @@ export default function ToxicsTab({
               <>
                 <p className="font-semibold text-slate-500 mb-1">Not a TRI Reporter</p>
                 <p className="text-[10px] text-slate-400 leading-relaxed">HAP data is only required for facilities in covered NAICS codes that process listed chemicals above reporting thresholds.</p>
+                <p className="text-[10px] text-amber-600 leading-relaxed mt-1.5 font-medium">
+                  Note: not reporting to TRI does <em>not</em> mean zero HAP emissions — check the NEI HAPs
+                  inventory below for facility emissions from the National Emissions Inventory.
+                </p>
               </>
             ) : isTRIReporter === true ? (
               <div className="flex flex-col items-center justify-center py-4">
@@ -343,6 +347,49 @@ export default function ToxicsTab({
               <>
                 {neiData?.found && neiData.haps.length > 0 ? (
                   <>
+                    {/* CAA §112 HAP Major Source Screen */}
+                    {(() => {
+                      const maxHap = neiData.haps.reduce((m, h) => (h.amount > m.amount ? h : m), neiData.haps[0]);
+                      const totalHaps = neiData.haps.reduce((s, h) => s + h.amount, 0);
+                      const singleOver = maxHap.amount >= 10;
+                      const totalOver = totalHaps >= 25;
+                      const anyOver = singleOver || totalOver;
+                      return (
+                        <div className={`mb-3 rounded-lg border p-2.5 ${anyOver ? 'bg-red-50/60 border-red-100' : 'bg-green-50/50 border-green-100'}`}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className={`text-[9px] font-bold uppercase tracking-widest ${anyOver ? 'text-red-700' : 'text-green-700'}`}>
+                              §112 HAP Major Source Screen
+                            </span>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${anyOver ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                              {anyOver ? 'Exceeds §112 Threshold' : 'Below §112 Thresholds'}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                            <div className={`p-1.5 rounded border ${singleOver ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase">Highest Single HAP (≥10 TPY)</p>
+                              <p className={`font-bold ${singleOver ? 'text-red-700' : 'text-slate-700'}`}>
+                                {maxHap.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} TPY
+                                {singleOver && ' ⚠'}
+                              </p>
+                              <p className="text-[8px] text-slate-400 truncate">{maxHap.pollutant}</p>
+                            </div>
+                            <div className={`p-1.5 rounded border ${totalOver ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100'}`}>
+                              <p className="text-[8px] font-bold text-slate-400 uppercase">Combined HAPs (≥25 TPY)</p>
+                              <p className={`font-bold ${totalOver ? 'text-red-700' : 'text-slate-700'}`}>
+                                {totalHaps.toLocaleString(undefined, { maximumFractionDigits: 2 })} TPY
+                                {totalOver && ' ⚠'}
+                              </p>
+                              <p className="text-[8px] text-slate-400">{neiData.haps.length} HAPs reported</p>
+                            </div>
+                          </div>
+                          <p className="text-[8px] text-slate-400 mt-1.5 leading-relaxed italic">
+                            Screening aid using {neiYear} NEI reported actuals. §112 major-source status is
+                            determined by potential to emit (PTE ≥ actuals) — a facility below thresholds on
+                            actuals may still be major; confirm against permit limits.
+                          </p>
+                        </div>
+                      );
+                    })()}
                     <p className="text-[9px] text-slate-400 mb-2">
                       Hazardous air pollutants (HAPs) — {neiYear} NEI facility-reported, actual emissions.
                     </p>

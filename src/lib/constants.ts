@@ -51,6 +51,37 @@ export function normalizePsdPollutant(name: string): string | null {
   return null;
 }
 
+// Mandatory Federal Class I Areas relevant to Mississippi-region PSD review
+// (South-Central US). Coordinates are representative interior points — actual
+// boundary distances are shorter. FLAG guidance calls for FLM notification for
+// sources locating within ~300 km of a Class I area; verify with the FLM.
+export interface ClassIArea {
+  name: string;
+  state: string;
+  agency: string;
+  lat: number;
+  lon: number;
+}
+
+export const CLASS_I_AREAS_SC: ClassIArea[] = [
+  { name: 'Breton Wilderness', state: 'LA', agency: 'US Fish & Wildlife Service', lat: 29.75, lon: -88.95 },
+  { name: 'Sipsey Wilderness', state: 'AL', agency: 'US Forest Service', lat: 34.33, lon: -87.43 },
+  { name: 'Caney Creek Wilderness', state: 'AR', agency: 'US Forest Service', lat: 34.38, lon: -94.04 },
+  { name: 'Upper Buffalo Wilderness', state: 'AR', agency: 'US Forest Service', lat: 35.83, lon: -93.38 },
+  { name: 'Mingo Wilderness', state: 'MO', agency: 'US Fish & Wildlife Service', lat: 36.97, lon: -90.14 },
+  { name: 'Hercules-Glades Wilderness', state: 'MO', agency: 'US Forest Service', lat: 36.68, lon: -92.92 },
+];
+
+export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 export function shortenChemicalName(name: string): string {
   if (!name) return '';
   const n = name.trim();

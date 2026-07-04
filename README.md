@@ -111,3 +111,26 @@ This application is fully optimized for serverless deployment on Vercel:
 * **Security Headers**: `nosniff`, frame protection, referrer and permissions policies applied globally.
 
 Remember to set `AQS_EMAIL`, `AQS_KEY`, and `EPA_CAMD_API_KEY` in the Vercel project's environment variables.
+
+---
+
+## Maintainer & Contact
+
+This application is maintained by:
+
+**Rodney Cuevas**
+Manager — Air Quality Management Branch
+Mississippi Department of Environmental Quality, Air Division
+
+For comments, questions, bug reports, or suggestions: [RCuevas@mdeq.ms.gov](mailto:RCuevas@mdeq.ms.gov)
+
+---
+
+## Disclaimer
+
+* **Screening tool only.** This dashboard is provided for informational and preliminary screening purposes. It does **not** constitute a regulatory applicability determination, permit decision, compliance certification, or official position of the Mississippi Department of Environmental Quality or the U.S. Environmental Protection Agency.
+* **Verify against official sources.** All data are retrieved from publicly available EPA systems (ECHO, CAMPD, NEI, TRI, AQS, and design value reports) and are presented "as is," without warranty of accuracy, completeness, or timeliness. Upstream EPA datasets are revised over time; values shown here may lag or differ from current agency records. Confirm any value used in a permit application or regulatory analysis against the official source of record.
+* **Not legal advice.** References to statutes and regulations (e.g., 40 CFR 52.21, CAA §112) are provided for convenience only. Consult the current Code of Federal Regulations, applicable Mississippi air regulations, and MDEQ staff for authoritative requirements.
+* **Estimated values are labeled.** Where measured data are unavailable (e.g., stack parameters), the application substitutes clearly labeled industry-standard estimates that are unsuitable for final modeling without verification.
+* **Applicability screens are simplified.** PSD and §112 indicators use reported *actual* emissions as a floor for potential to emit (PTE) and approximate source-category classifications; actual applicability depends on PTE, permit limits, and project-specific emissions increases.
+* **Third-party content.** Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.

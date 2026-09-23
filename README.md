@@ -19,7 +19,7 @@ Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Di
 * **Applicability Indicators**: PSD major-source check (100 tpy listed categories / 250 tpy otherwise, using actuals as a PTE floor) and a GHG Step-2 indicator against the 75,000 tpy CO₂e significance level (UARG "anyway source" framework).
 * **Class I Area Proximity**: Distance screening against South-Central US mandatory Class I areas (Breton, Sipsey, Caney Creek, Upper Buffalo, Mingo, Hercules-Glades) with the ~300 km FLAG Federal Land Manager notification zone flagged.
 * **Minor Source Baseline Dates**: County-by-county PSD baseline date tracker for NO₂, SO₂, PM₁₀, and PM₂.₅.
-* **Stack Parameters**: Unit-level stack data from CAMD monitor plans (EGUs) or NEI release points, with EPA RSEI industry-median fallbacks for AERMOD screening; supports manual CSV upload.
+* **Stack Parameters**: Unit-level stack data for AERMOD screening from CAMD monitor plans (EGUs), with EPA RSEI industry-median fallbacks otherwise; supports manual CSV upload.
 
 ### Toxics
 * **TRI HAPs Inventory & Trends**: Multi-year Toxics Release Inventory air releases with historical trend charts, auto-synced from EPA Envirofacts.
@@ -29,7 +29,7 @@ Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Di
 
 ### NAAQS
 * **Official EPA Design Values**: Ingests EPA's official annual design value reports (xlsx) directly — the authoritative source, typically months ahead of other feeds — with the ArcGIS FeatureServer as history/fallback.
-* **Attainment & Trends**: CFR-compliant certified Design Values for all criteria pollutants, 10+ year trend charts against the standards, and quarterly data-completeness indicators.
+* **Attainment & Trends**: CFR-compliant certified Design Values for all criteria pollutants except lead, 10+ year trend charts against the standards, and quarterly data-completeness indicators.
 
 ---
 
@@ -41,13 +41,13 @@ Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Di
 4. **EPA Toxics Release Inventory (TRI)** — Multi-year release summaries via Envirofacts.
 5. **EPA Air Quality Design Value Reports** — Official annual xlsx reports (primary NAAQS source).
 6. **EPA ArcGIS FeatureServer** — NAAQS design value history and NEI 2020 layers.
-7. **EPA AQS Service** — Ambient monitor parameters, daily samples, and annual statistics.
+7. **EPA AQS Service** — Ambient monitor locations and the parameters each monitor measures.
 
 ---
 
 ## Tech Stack
 
-* **Framework**: [Next.js](https://nextjs.org/) 16 (App Router, webpack build)
+* **Framework**: [Next.js](https://nextjs.org/) 16 (App Router; `npm run dev` uses webpack, production builds use Turbopack)
 * **Frontend**: React 19, Tailwind CSS
 * **Mapping**: Leaflet, [react-leaflet](https://react-leaflet.js.org/)
 * **Charts**: [Recharts](https://recharts.org/)
@@ -92,13 +92,13 @@ Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Di
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+   Open [http://localhost:3000](http://localhost:3000) to view it in your browser. On the first page load, the local server checks EPA for newer TRI and NEI 2023 data and syncs any it finds into `src/lib/` (the NEI zip is about 39 MB and needs `unzip`).
 
 ---
 
 ## Automated Data Freshness
 
-A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the upstream EPA sources — NEI GAFTP dataset version, NAAQS design value years, new TRI reporting years, ECHO facility inventory drift, and new CAMD data years — and opens a GitHub Issue when an update is available.
+A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the upstream EPA sources — NEI GAFTP dataset version, new TRI reporting years, ECHO facility inventory drift, and new CAMD data years (only when the `EPA_CAMD_API_KEY` repository secret is set) — and opens a GitHub Issue when an update is available. It also checks that both NAAQS design value sources still answer (the app picks up new design value years at runtime), and the run fails if any check errors.
 
 ---
 
@@ -106,9 +106,9 @@ A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the 
 
 This application is fully optimized for serverless deployment on Vercel:
 * **Serverless Caching**: Automatically falls back to `/tmp` in serverless environments for API response caches, preventing read-only filesystem crashes.
-* **Stateless Operation**: Pre-compiled datasets (NEI 2023, TRI emissions, facility seed) are packed with the build for instant load times without external database dependencies; sync endpoints are disabled serverlessly, and data updates flow through the daily GitHub Action + redeploy.
+* **Stateless Operation**: Pre-compiled datasets (NEI 2023, TRI emissions, facility seed) are packed with the build for instant load times without external database dependencies; sync endpoints are disabled serverlessly; the daily GitHub Action flags data updates, which are then synced locally, committed and redeployed.
 * **Cold-Start Resilience**: The facility roster is served from a committed seed file within a bounded time budget when live EPA APIs are slow.
-* **Security Headers**: `nosniff`, frame protection, referrer and permissions policies applied globally.
+* **Security Headers**: `nosniff`, frame protection, referrer and permissions policies, and a Content-Security-Policy applied globally. Production builds enforce the full CSP, so a new third-party host (tile server, CDN) must be added to `CSP_PRODUCTION` in `next.config.ts`.
 
 Remember to set `AQS_EMAIL`, `AQS_KEY`, and `EPA_CAMD_API_KEY` in the Vercel project's environment variables.
 

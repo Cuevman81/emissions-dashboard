@@ -16,7 +16,6 @@ const STATE_CODE_MAP: Record<string, string> = {
 
 const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const AQS_DATA_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Ensure cache directory exists
 try {
@@ -30,13 +29,12 @@ try {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const state = searchParams.get('state');
+  // Only the monitor-roster mode exists. The old per-site "samples"/"annual" modes
+  // were unused by the UI and let any caller spend this deployment's AQS quota.
   const mode = searchParams.get('mode') || 'monitors';
-  // Monitor ID is state_code(2) + county_code(3) + site_number — digits only.
-  // Validated because it flows into cache file paths and the EPA request URL.
-  const monitorIdRaw = searchParams.get('monitorId');
-  const monitorId = monitorIdRaw && /^\d{7,12}$/.test(monitorIdRaw) ? monitorIdRaw : null;
   const yearRaw = searchParams.get('year') || '2023';
-  const year = /^\d{4}$/.test(yearRaw) ? yearRaw : '2023';
+  // Bounded to real AQS years so arbitrary values can't mint uncached AQS requests
+  const year = /^\d{4}$/.test(yearRaw) && +yearRaw >= 1980 && +yearRaw <= new Date().getUTCFullYear() ? yearRaw : '2023';
   const refresh = searchParams.get('refresh') === 'true';
 
   const DEBUG_LOG = 'aqs_debug.log';
@@ -156,129 +154,6 @@ export async function GET(request: Request) {
           return NextResponse.json(JSON.parse(cached));
         }
         
-        return NextResponse.json([]);
-      }
-    }
-
-    if (mode === 'samples' && monitorId) {
-      writeLog(DEBUG_LOG, `Starting Samples Fetch: Monitor=${monitorId}, Year=${year}`);
-      
-      const sampleCacheKey = `aqs_samples_${monitorId}_${year}.json`;
-      const sampleCachePath = path.join(CACHE_DIR, sampleCacheKey);
-
-      // Check Cache
-      if (fs.existsSync(sampleCachePath)) {
-        const stats = fs.statSync(sampleCachePath);
-        if (Date.now() - stats.mtimeMs < AQS_DATA_CACHE_TTL) {
-          writeLog(DEBUG_LOG, `CACHE HIT: Loading samples from ${sampleCacheKey}.`);
-          const cached = fs.readFileSync(sampleCachePath, 'utf8');
-          return NextResponse.json(JSON.parse(cached));
-        }
-      }
-
-      const stateCode = monitorId.substring(0, 2);
-      const countyCode = monitorId.substring(2, 5);
-      const siteNum = monitorId.substring(5);
-
-      const bdate = `${year}0101`;
-      const edate = `${year}1231`;
-      // Extensive list of Core HAPs and common toxics (Benzene, Formaldehyde, Metals, etc.)
-      const paramList = '44201,42401,88101,42602,42101,81102,45201,43102,43505,43502,43503,43218,43843,14129,12103,12112,12128,12110,12132,12136,12102,43804,43803,43818,45202,45220,43201';
-
-      writeLog(DEBUG_LOG, `EPA REQUEST: dailyData/bySite?site=${monitorId}&params=${paramList.substring(0, 30)}...&year=${year}`);
-
-      try {
-        const aqsUrl = `${AQS_BASE_URL}/dailyData/bySite?email=${email}&key=${key}&param=${paramList}&bdate=${bdate}&edate=${edate}&state=${stateCode}&county=${countyCode}&site=${siteNum}`;
-        const startTime = Date.now();
-        const res = await fetch(aqsUrl);
-        const duration = Date.now() - startTime;
-        
-        writeLog(DEBUG_LOG, `EPA RESPONSE: Status=${res.status}, Duration=${duration}ms`);
-        
-        if (!res.ok) {
-          writeLog(DEBUG_LOG, `ERROR: EPA API responded with status ${res.status} ${res.statusText}`);
-          throw new Error(`AQS API error: ${res.statusText}`);
-        }
-        
-        const data = await res.json();
-        const allSamples = data.Data || [];
-
-        writeLog(DEBUG_LOG, `EPA DATA: Success. Found ${allSamples.length} measurements.`);
-
-        // Save to cache
-        try {
-          fs.writeFileSync(sampleCachePath, JSON.stringify(allSamples), 'utf8');
-          writeLog(DEBUG_LOG, `CACHE SAVE: Saved samples to ${sampleCacheKey}`);
-        } catch (cacheErr) {
-          console.error('Failed to write AQS samples cache:', cacheErr);
-        }
-
-        return NextResponse.json(allSamples);
-      } catch (err: any) {
-        writeLog(DEBUG_LOG, `FETCH ERROR: ${err.message}`);
-        console.error(`[AQS API] Samples fetch failed:`, err.message);
-        return NextResponse.json([]);
-      }
-    }
-
-    if (mode === 'annual' && monitorId) {
-      writeLog(DEBUG_LOG, `Starting Annual Data Fetch: Monitor=${monitorId}`);
-
-      const annualCacheKey = `aqs_annual_${monitorId}.json`;
-      const annualCachePath = path.join(CACHE_DIR, annualCacheKey);
-
-      // Check Cache
-      if (fs.existsSync(annualCachePath)) {
-        const stats = fs.statSync(annualCachePath);
-        if (Date.now() - stats.mtimeMs < AQS_DATA_CACHE_TTL) {
-          writeLog(DEBUG_LOG, `CACHE HIT: Loading annual data from ${annualCacheKey}.`);
-          const cached = fs.readFileSync(annualCachePath, 'utf8');
-          return NextResponse.json(JSON.parse(cached));
-        }
-      }
-
-      const stateCode = monitorId.substring(0, 2);
-      const countyCode = monitorId.substring(2, 5);
-      const siteNum = monitorId.substring(5);
-
-      // Fetch 10+ years of data
-      const bdate = '20140101';
-      const edate = '20251231';
-      // Extensive list of Core HAPs and common toxics (Benzene, Formaldehyde, Metals, etc.)
-      const paramList = '44201,42401,88101,42602,42101,81102,45201,43102,43505,43502,43503,43218,43843,14129,12103,12112,12128,12110,12132,12136,12102,43804,43803,43818,45202,45220,43201';
-
-      writeLog(DEBUG_LOG, `EPA REQUEST: annualData/bySite?site=${monitorId}&range=${bdate}-${edate}`);
-
-      try {
-        const aqsUrl = `${AQS_BASE_URL}/annualData/bySite?email=${email}&key=${key}&param=${paramList}&bdate=${bdate}&edate=${edate}&state=${stateCode}&county=${countyCode}&site=${siteNum}`;
-        const res = await fetch(aqsUrl);
-        if (!res.ok) throw new Error(`AQS API error: ${res.statusText}`);
-        
-        const data = await res.json();
-        const rawRows = data.Data || [];
-        writeLog(DEBUG_LOG, `EPA DATA: Found ${rawRows.length} annual statistic rows.`);
-
-        // Minimal processing to return year-by-year averages
-        const processed = rawRows.map((r: any) => ({
-          year: r.year,
-          parameter: r.parameter,
-          parameter_code: r.parameter_code,
-          arithmetic_mean: r.arithmetic_mean,
-          units: r.units_of_measure,
-          completeness: r.completeness_indicator
-        })).sort((a: any, b: any) => b.year - a.year);
-
-        // Save to cache
-        try {
-          fs.writeFileSync(annualCachePath, JSON.stringify(processed), 'utf8');
-          writeLog(DEBUG_LOG, `CACHE SAVE: Saved annual data to ${annualCacheKey}`);
-        } catch (cacheErr) {
-          console.error('Failed to write AQS annual cache:', cacheErr);
-        }
-
-        return NextResponse.json(processed);
-      } catch (err: any) {
-        writeLog(DEBUG_LOG, `ANNUAL FETCH ERROR: ${err.message}`);
         return NextResponse.json([]);
       }
     }

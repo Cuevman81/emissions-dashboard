@@ -78,8 +78,10 @@ async function queryLayer(layerId: number, stateName: string, dvYearText?: strin
 
   const url = `${ARCGIS_BASE}/${layerId}/query?${params}`;
   const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
-  if (!res.ok) return [];
+  // Throw rather than return [] so a failed layer is reported, not read as "no sites"
+  if (!res.ok) throw new Error(`ArcGIS layer ${layerId} HTTP ${res.status}`);
   const data = await res.json();
+  if (data.error) throw new Error(`ArcGIS layer ${layerId}: ${data.error.message || 'query error'}`);
   return data.features?.map((f: any) => f.attributes) || [];
 }
 
@@ -535,6 +537,14 @@ function dedupeTrends(allTrends: TrendPoint[]): TrendPoint[] {
 // full history for trends. Used for historical years and as the fallback source.
 async function buildFromArcgis(stateName: string, endYear: number) {
   const dvYear = String(endYear);
+  // A layer that fails is recorded under its pollutant instead of passing as empty
+  const missing = new Set<string>();
+  const layer = (id: number, pollutant: string, year?: string) =>
+    queryLayer(id, stateName, year).catch((err: Error) => {
+      console.error(`[NAAQS] ${pollutant} layer failed:`, err.message);
+      missing.add(pollutant);
+      return [] as any[];
+    });
   const [
     o3Cur, o3All,
     pm25_24Cur, pm25_24All,
@@ -546,15 +556,15 @@ async function buildFromArcgis(stateName: string, endYear: number) {
     co1hrCur, co1hrAll,
     co8hrCur, co8hrAll,
   ] = await Promise.all([
-    queryLayer(1, stateName, dvYear), queryLayer(1, stateName),   // O3
-    queryLayer(3, stateName, dvYear), queryLayer(3, stateName),   // PM2.5 24-hr
-    queryLayer(4, stateName, dvYear), queryLayer(4, stateName),   // PM2.5 Annual
-    queryLayer(2, stateName, dvYear), queryLayer(2, stateName),   // PM10
-    queryLayer(9, stateName, dvYear), queryLayer(9, stateName),   // NO2 Annual
-    queryLayer(10, stateName, dvYear), queryLayer(10, stateName), // NO2 1-hr
-    queryLayer(6, stateName, dvYear), queryLayer(6, stateName),   // SO2
-    queryLayer(7, stateName, dvYear), queryLayer(7, stateName),   // CO 1-hr
-    queryLayer(8, stateName, dvYear), queryLayer(8, stateName),   // CO 8-hr
+    layer(1, 'O3', dvYear), layer(1, 'O3'),         // O3
+    layer(3, 'PM2.5', dvYear), layer(3, 'PM2.5'),   // PM2.5 24-hr
+    layer(4, 'PM2.5', dvYear), layer(4, 'PM2.5'),   // PM2.5 Annual
+    layer(2, 'PM10', dvYear), layer(2, 'PM10'),     // PM10
+    layer(9, 'NO2', dvYear), layer(9, 'NO2'),       // NO2 Annual
+    layer(10, 'NO2', dvYear), layer(10, 'NO2'),     // NO2 1-hr
+    layer(6, 'SO2', dvYear), layer(6, 'SO2'),       // SO2
+    layer(7, 'CO', dvYear), layer(7, 'CO'),         // CO 1-hr
+    layer(8, 'CO', dvYear), layer(8, 'CO'),         // CO 8-hr
   ]);
 
   const o3 = processO3(o3Cur, o3All);
@@ -570,6 +580,7 @@ async function buildFromArcgis(stateName: string, endYear: number) {
     designValues: [...o3.dvs, ...pm25_24.dvs, ...pm25_ann.dvs, ...pm10.dvs, ...no2_ann.dvs, ...no2_1hr.dvs, ...so2.dvs, ...co.dvs],
     trends: [...o3.trends, ...pm25_24.trends, ...pm25_ann.trends, ...pm10.trends, ...no2_ann.trends, ...no2_1hr.trends, ...so2.trends, ...co.trends],
     completeness: [...o3.completeness, ...pm25_24.completeness, ...pm25_ann.completeness, ...pm10.completeness],
+    missing: [...missing],
   };
 }
 
@@ -614,7 +625,8 @@ export async function GET(request: Request) {
 
   // Prefer EPA's official xlsx reports for any year they cover (they lead ArcGIS).
   const useXlsx = xlsxYear != null && endYear === xlsxYear;
-  const resultCacheKey = `naaqs_${useXlsx ? 'xlsx' : 'arcgis'}_${state}_${endYear}.json`;
+  // v2: pre-v2 cache files could hold results with a pollutant silently missing
+  const resultCacheKey = `naaqs_v2_${useXlsx ? 'xlsx' : 'arcgis'}_${state}_${endYear}.json`;
   const resultCachePath = path.join(CACHE_DIR, resultCacheKey);
   if (fs.existsSync(resultCachePath)) {
     const stats = fs.statSync(resultCachePath);
@@ -631,37 +643,50 @@ export async function GET(request: Request) {
   let source: 'xlsx' | 'arcgis' = useXlsx ? 'xlsx' : 'arcgis';
   try {
     let designValues, trends, completeness;
+    let missing: string[] = [];
+    let trendsIncomplete = false;
 
     if (useXlsx) {
       try {
         // Official EPA report (primary) + ArcGIS for the long trend history.
         const [xlsx, historyTrends] = await Promise.all([
           getXlsxDesignValues(stateName, endYear),
-          getArcgisTrends(stateName),
+          getArcgisTrends(stateName).catch((err: Error) => {
+            console.error('[NAAQS] ArcGIS trend history failed:', err.message);
+            trendsIncomplete = true;
+            return [] as TrendPoint[];
+          }),
         ]);
         designValues = xlsx.dvs;
         completeness = xlsx.completeness;
         trends = [...historyTrends, ...xlsx.trendPoints];
+        missing = xlsx.missing;
       } catch (xlsxErr: any) {
         // Graceful fallback: serve whatever ArcGIS has for this year.
         console.error(`[NAAQS] xlsx ingestion failed for ${state}/${endYear}, falling back to ArcGIS:`, xlsxErr.message);
         source = 'arcgis';
         const arc = await buildFromArcgis(stateName, endYear);
-        ({ designValues, trends, completeness } = arc);
+        ({ designValues, trends, completeness, missing } = arc);
       }
     } else {
       const arc = await buildFromArcgis(stateName, endYear);
-      ({ designValues, trends, completeness } = arc);
+      ({ designValues, trends, completeness, missing } = arc);
     }
 
-    const result = { designValues, trends: dedupeTrends(trends), completeness, state, endYear, latestYear, source };
+    const result = { designValues, trends: dedupeTrends(trends), completeness, state, endYear, latestYear, source, missing };
 
-    try {
-      // Cache under the source actually used (avoids caching an arcgis-fallback under the xlsx key).
-      const writeKey = `naaqs_${source}_${state}_${endYear}.json`;
-      fs.writeFileSync(path.join(CACHE_DIR, writeKey), JSON.stringify(result), 'utf8');
-      console.log(`[NAAQS] Cached (${source}): ${result.designValues.length} DVs, ${result.trends.length} trends for ${state}/${endYear}`);
-    } catch { /* ignore */ }
+    // Never cache an incomplete result: a pollutant that failed to load would stay
+    // missing (and read as "attainment") for the whole 7-day TTL.
+    if (missing.length === 0 && !trendsIncomplete) {
+      try {
+        // Cache under the source actually used (avoids caching an arcgis-fallback under the xlsx key).
+        const writeKey = `naaqs_v2_${source}_${state}_${endYear}.json`;
+        fs.writeFileSync(path.join(CACHE_DIR, writeKey), JSON.stringify(result), 'utf8');
+        console.log(`[NAAQS] Cached (${source}): ${result.designValues.length} DVs, ${result.trends.length} trends for ${state}/${endYear}`);
+      } catch { /* ignore */ }
+    } else {
+      console.warn(`[NAAQS] Not caching incomplete result for ${state}/${endYear}: missing [${missing.join(', ')}]${trendsIncomplete ? ', trend history' : ''}`);
+    }
 
     return NextResponse.json(result);
   } catch (err: any) {

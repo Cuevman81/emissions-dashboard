@@ -369,6 +369,7 @@ export interface NaaqsResult {
   endYear: number;
   latestYear?: number;
   source?: 'xlsx' | 'arcgis';
+  missing?: string[];   // pollutants that failed to load for this year (not attainment)
 }
 
 /**
@@ -378,11 +379,11 @@ export async function fetchNaaqsDesignValues(state: string, endYear?: number): P
   try {
     const url = endYear !== undefined ? `/api/naaqs?state=${state}&endYear=${endYear}` : `/api/naaqs?state=${state}`;
     const res = await fetch(url);
-    if (!res.ok) return { designValues: [], trends: [], completeness: [], state, endYear: endYear || 2024 };
+    if (!res.ok) return { designValues: [], trends: [], completeness: [], state, endYear: endYear || 2024, missing: ['all pollutants'] };
     return await res.json();
   } catch (err) {
     console.error('NAAQS fetch error:', err);
-    return { designValues: [], trends: [], completeness: [], state, endYear: endYear || 2024 };
+    return { designValues: [], trends: [], completeness: [], state, endYear: endYear || 2024, missing: ['all pollutants'] };
   }
 }
 

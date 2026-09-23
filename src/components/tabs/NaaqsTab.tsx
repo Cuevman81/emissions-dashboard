@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine } from 'recharts';
-import { Loader2, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, ShieldAlert, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { fetchNaaqsDesignValues, NaaqsDesignValue, NaaqsTrend, NaaqsCompleteness } from '@/lib/data-service';
 import { NaaqsTooltip } from '@/components/ChartTooltips';
 
@@ -25,6 +25,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
   const [endYear, setEndYear] = useState<number | undefined>(undefined);
   const [latestYear, setLatestYear] = useState<number>(2024);
   const [source, setSource] = useState<'xlsx' | 'arcgis' | undefined>(undefined);
+  const [missing, setMissing] = useState<string[]>([]);
   const [pollutantFilter, setPollutantFilter] = useState<string>('All');
   const [showCompleteness, setShowCompleteness] = useState(false);
   const [showTrends, setShowTrends] = useState(true);
@@ -39,6 +40,7 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
       setCompleteness(result.completeness);
       setLatestYear(result.latestYear || result.endYear || 2024);
       setSource(result.source);
+      setMissing(result.missing || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -156,6 +158,12 @@ export default function NaaqsTab({ selectedState, isMounted }: NaaqsTabProps) {
         <p className="text-[9px] text-slate-400 leading-relaxed">
           Official EPA design values from the Air Quality Design Values report. Source: EPA ArcGIS FeatureServer.
         </p>
+        {missing.length > 0 && (
+          <p role="alert" className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+            <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+            Not loaded: {missing.join(', ')}. EPA data could not be retrieved; absent pollutants are not attainment.
+          </p>
+        )}
       </div>
 
       {/* Summary badges */}

@@ -67,6 +67,7 @@ export interface XlsxResult {
   dvs: XlsxDesignValue[];
   completeness: XlsxCompleteness[];
   trendPoints: XlsxTrendPoint[];
+  missing: string[];   // pollutants whose workbook for this year is absent or failed to load
 }
 
 // One entry per design-value table we extract. `tabKeyword` disambiguates the
@@ -108,14 +109,17 @@ const REPORTS: Record<string, TableConfig[]> = {
 
 interface DiscoveredReport { url: string; endYear: number; }
 
-let discoveryCache: { reports: Record<string, DiscoveredReport>; time: number } | null = null;
+// prefix -> end-year -> report. Every posted year is kept: EPA posts the six
+// workbooks on different days, so one pollutant's next-year file can appear first.
+type DiscoveredReports = Record<string, Record<number, DiscoveredReport>>;
+
+let discoveryCache: { reports: DiscoveredReports; time: number } | null = null;
 
 /**
- * Scrape the EPA index page for the newest workbook per pollutant.
- * Filenames look like `o3_designvalues_2023_2025_final_06_08_26.xlsx`; we pick
- * the entry with the greatest end-year for each prefix.
+ * Scrape the EPA index page for every workbook per pollutant and year.
+ * Filenames look like `o3_designvalues_2023_2025_final_06_08_26.xlsx`.
  */
-export async function discoverReports(): Promise<Record<string, DiscoveredReport>> {
+export async function discoverReports(): Promise<DiscoveredReports> {
   const now = Date.now();
   if (discoveryCache && now - discoveryCache.time < DISCOVERY_TTL) {
     return discoveryCache.reports;
@@ -125,17 +129,14 @@ export async function discoverReports(): Promise<Record<string, DiscoveredReport
   if (!res.ok) throw new Error(`Index page HTTP ${res.status}`);
   const html = await res.text();
 
-  const reports: Record<string, DiscoveredReport> = {};
+  const reports: DiscoveredReports = {};
   const re = /https?:\/\/[^"'\s]*?\/([a-z0-9]+)_designvalues_(\d{4})_(\d{4})_final_[^"'\s]*?\.xlsx/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     const prefix = m[1].toLowerCase();
     if (!REPORTS[prefix]) continue;          // ignore pollutants we don't surface (e.g. pb/lead)
     const endYear = parseInt(m[3]);
-    const url = m[0];
-    if (!reports[prefix] || endYear > reports[prefix].endYear) {
-      reports[prefix] = { url, endYear };
-    }
+    (reports[prefix] ??= {})[endYear] ??= { url: m[0], endYear };
   }
 
   if (Object.keys(reports).length === 0) throw new Error('No design-value workbooks found on index page');
@@ -143,12 +144,18 @@ export async function discoverReports(): Promise<Record<string, DiscoveredReport
   return reports;
 }
 
-/** Greatest end-year across all discovered reports (the "latest available" year). */
+/**
+ * The newest end-year that EVERY pollutant's workbook has reached. Taking the
+ * newest year of any single workbook would make the default view jump to a year
+ * that only one pollutant has been posted for.
+ */
 export async function getXlsxLatestYear(): Promise<number | null> {
   try {
     const reports = await discoverReports();
-    const years = Object.values(reports).map(r => r.endYear);
-    return years.length ? Math.max(...years) : null;
+    const newestPerPollutant = Object.keys(REPORTS)
+      .filter(prefix => reports[prefix])
+      .map(prefix => Math.max(...Object.keys(reports[prefix]).map(Number)));
+    return newestPerPollutant.length ? Math.min(...newestPerPollutant) : null;
   } catch {
     return null;
   }
@@ -252,7 +259,7 @@ function mapColumns(ws: ExcelJS.Worksheet, headerRow: number) {
 }
 
 /** Parse one pollutant workbook for a single state into DesignValue / completeness / trend rows. */
-async function parseWorkbook(filePath: string, configs: TableConfig[], stateName: string, endYear: number): Promise<XlsxResult> {
+async function parseWorkbook(filePath: string, configs: TableConfig[], stateName: string, endYear: number): Promise<Omit<XlsxResult, 'missing'>> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(filePath);
 
@@ -328,30 +335,36 @@ async function parseWorkbook(filePath: string, configs: TableConfig[], stateName
 /**
  * Primary entry point. Returns design values, completeness, and latest-year trend
  * points for `stateName` at `endYear`, parsed from EPA's official xlsx reports.
- * Only reports whose end-year matches `endYear` are used. Throws on hard failure
- * so the caller can fall back to ArcGIS.
+ * Only reports whose end-year matches `endYear` are used. A pollutant whose
+ * workbook is absent or fails is listed in `missing` (never silently dropped).
+ * Throws on hard failure so the caller can fall back to ArcGIS.
  */
 export async function getXlsxDesignValues(stateName: string, endYear: number): Promise<XlsxResult> {
   const reports = await discoverReports();
 
-  const out: XlsxResult = { dvs: [], completeness: [], trendPoints: [] };
-  const tasks = Object.entries(REPORTS)
-    .filter(([prefix]) => reports[prefix] && reports[prefix].endYear === endYear)
-    .map(async ([prefix, configs]) => {
-      try {
-        const filePath = await getCachedWorkbook(prefix, reports[prefix]);
-        return await parseWorkbook(filePath, configs, stateName, endYear);
-      } catch (err) {
-        console.error(`[NAAQS-xlsx] Failed to parse ${prefix}:`, (err as Error).message);
-        return { dvs: [], completeness: [], trendPoints: [] } as XlsxResult;
-      }
-    });
+  const out: XlsxResult = { dvs: [], completeness: [], trendPoints: [], missing: [] };
+  const tasks = Object.entries(REPORTS).map(async ([prefix, configs]) => {
+    const label = configs[0].pollutant;
+    const report = reports[prefix]?.[endYear];
+    if (!report) {
+      console.warn(`[NAAQS-xlsx] No ${endYear} workbook posted for ${prefix}`);
+      return { dvs: [], completeness: [], trendPoints: [], missing: [label] } as XlsxResult;
+    }
+    try {
+      const filePath = await getCachedWorkbook(prefix, report);
+      return { ...(await parseWorkbook(filePath, configs, stateName, endYear)), missing: [] };
+    } catch (err) {
+      console.error(`[NAAQS-xlsx] Failed to parse ${prefix}:`, (err as Error).message);
+      return { dvs: [], completeness: [], trendPoints: [], missing: [label] } as XlsxResult;
+    }
+  });
 
   const results = await Promise.all(tasks);
   for (const res of results) {
     out.dvs.push(...res.dvs);
     out.completeness.push(...res.completeness);
     out.trendPoints.push(...res.trendPoints);
+    out.missing.push(...res.missing);
   }
 
   if (out.dvs.length === 0) throw new Error(`No xlsx design values parsed for ${stateName}/${endYear}`);

@@ -35,6 +35,7 @@ export default function FacilityInventoryTab({
   const [naaqsLoading, setNaaqsLoading] = useState(true);
   const [designValues, setDesignValues] = useState<NaaqsDesignValue[]>([]);
   const [aqsYear, setAqsYear] = useState<number>(2024);
+  const [naaqsMissing, setNaaqsMissing] = useState<string[]>([]);
 
   // ── Dynamic Data Freshness Years ────────────────────────────
   // Derive latest available years from actual loaded data rather than hardcoding
@@ -72,6 +73,7 @@ export default function FacilityInventoryTab({
       if (cancelled) return;
       setDesignValues(result.designValues);
       setAqsYear(result.latestYear || result.endYear);
+      setNaaqsMissing(result.missing || []);
       setNaaqsLoading(false);
     });
     return () => { cancelled = true; };
@@ -342,7 +344,7 @@ export default function FacilityInventoryTab({
           <div className="flex items-center gap-2 text-xs text-slate-400 py-4 justify-center">
             <Loader2 className="h-3 w-3 animate-spin" /> Loading design values...
           </div>
-        ) : attainmentSnapshot.length === 0 ? (
+        ) : attainmentSnapshot.length === 0 && naaqsMissing.length === 0 ? (
           <div className="text-center py-4">
             <Info className="h-4 w-4 text-slate-300 mx-auto mb-1" />
             <p className="text-[10px] text-slate-400 italic">No NAAQS monitoring data for this state</p>
@@ -376,6 +378,12 @@ export default function FacilityInventoryTab({
               </div>
             ))}
           </div>
+        )}
+        {!naaqsLoading && naaqsMissing.length > 0 && (
+          <p role="alert" className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+            <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+            Not loaded: {naaqsMissing.join(', ')}. Absent pollutants are not attainment.
+          </p>
         )}
         <p className="text-[8px] text-slate-300 mt-2 text-center italic">
           Based on EPA ArcGIS certified design values ({aqsYear - 2}-{aqsYear})

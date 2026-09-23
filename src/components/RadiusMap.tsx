@@ -62,6 +62,10 @@ function makeMarkerIcon(f: Facility): L.DivIcon | L.Icon {
   return makePermitIcon(f.isMajor, f.permitType);
 }
 
+// Leaflet renders popup strings as HTML, so feature text from the EPA layer is escaped.
+const escapeHtml = (v: unknown) =>
+  String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+
 // Style for Class I area polygons
 const classIStyle = {
   color: '#166534',       // green-800 border
@@ -137,8 +141,8 @@ export default function RadiusMap({
           data={classIGeoJson!}
           pathOptions={classIStyle}
           onEachFeature={(feature: Feature, layer: L.Layer) => {
-            const name = feature.properties?._displayName ?? 'Class I Area';
-            const type = feature.properties?._type ?? '';
+            const name = escapeHtml(feature.properties?._displayName ?? 'Class I Area');
+            const type = escapeHtml(feature.properties?._type ?? '');
             const acres = feature.properties?.GIS_ACRES ?? feature.properties?.GIS_Acres;
             const acreStr = acres ? ` · ${Math.round(acres).toLocaleString()} ac` : '';
             if ((layer as L.Path).bindPopup) {

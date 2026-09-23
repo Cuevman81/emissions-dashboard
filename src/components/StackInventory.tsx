@@ -17,13 +17,23 @@ const ftToM = (ft: number) => (ft * 0.3048).toFixed(2);
 const fToK = (f: number) => ((f - 32) * 5 / 9 + 273.15).toFixed(2);
 const fpsToMs = (fps: number) => (fps * 0.3048).toFixed(2);
 
+// AERMOD source IDs are alphanumeric, up to 12 characters (AERMOD User's Guide, SO
+// LOCATION); a dash would read as an ID range (STACK1-STACK10) on SRCGROUP cards.
+const aermodSrcId = (id?: string) => ((id ?? '').replace(/[^A-Za-z0-9]/g, '') || 'STACK1').slice(0, 12);
+
+// AERMOD has no POINTSOURCE keyword. A point source is declared with
+//   SO LOCATION Srcid POINT Xs Ys (Zs)
+// and its parameters follow on
+//   SO SRCPARAM Srcid Ptemis(g/s) Stkhgt(m) Stktmp(K) Stkvel(m/s) Stkdia(m)
+// (AERMOD User's Guide, EPA-454/B-26-001, Sec. 3.3.1-3.3.2).
 function buildAermodLine(s: StackParameter): string {
+  const id = aermodSrcId(s.stackId);
   const hm = s.height ? ftToM(s.height) : '?.??';
   const tk = s.temp != null ? fToK(s.temp) : '?.??';
   const vm = s.velocity != null ? fpsToMs(s.velocity) : '?.??';
   const dm = s.diameter ? ftToM(s.diameter) : '?.??';
-  // Emission rate is facility/pollutant-specific — user fills in (g/s)
-  return `SO POINTSOURCE  ${s.stackId}  <em_gs>  ${hm}  ${tk}  ${vm}  ${dm}`;
+  // Location (UTM m, base elevation m) and emission rate (g/s) are project-specific — user fills in
+  return `SO LOCATION  ${id}  POINT  <x_m>  <y_m>  <zelev_m>\nSO SRCPARAM  ${id}  <em_gs>  ${hm}  ${tk}  ${vm}  ${dm}`;
 }
 
 function AermodCopyButton({ line }: { line: string }) {
@@ -42,7 +52,7 @@ function AermodCopyButton({ line }: { line: string }) {
   return (
     <button
       onClick={handleCopy}
-      title="Copy AERMOD SO POINTSOURCE line"
+      title="Copy AERMOD SO LOCATION / SRCPARAM lines"
       className="flex items-center gap-1 text-[9px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded transition-all"
     >
       {copied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
@@ -174,9 +184,9 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
 
                 {/* AERMOD preview line */}
                 <div className="bg-slate-900 rounded p-2 mt-1">
-                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-1">AERMOD SO POINTSOURCE</p>
-                  <code className="text-[9px] text-green-400 font-mono break-all leading-relaxed">{aermodLine}</code>
-                  <p className="text-[8px] text-slate-500 mt-1">Replace &lt;em_gs&gt; with emission rate in g/s</p>
+                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-1">AERMOD SO LOCATION / SRCPARAM</p>
+                  <code className="text-[9px] text-green-400 font-mono break-all whitespace-pre-wrap leading-relaxed">{aermodLine}</code>
+                  <p className="text-[8px] text-slate-500 mt-1">Replace &lt;x_m&gt; &lt;y_m&gt; &lt;zelev_m&gt; with the stack location (UTM, m) and base elevation (m), and &lt;em_gs&gt; with the emission rate in g/s</p>
                 </div>
               </div>
             );

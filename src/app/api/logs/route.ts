@@ -24,6 +24,13 @@ export async function POST(request: Request) {
       stack: clip(stack),
     };
 
+    // Vercel's filesystem is read-only (appendFileSync throws EROFS), so there the
+    // entry goes to the function's runtime log instead, which Vercel retains.
+    if (process.env.VERCEL) {
+      console.log(JSON.stringify(logEntry));
+      return new NextResponse(null, { status: 204 });
+    }
+
     // Store in app_errors.log in the src/logs directory
     const logPath = path.join(process.cwd(), 'src', 'logs', 'app_errors.log');
 
@@ -41,6 +48,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Failed to write log:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    // Don't echo error.message: it exposes server paths to any caller
+    return NextResponse.json({ success: false, error: 'log write failed' }, { status: 500 });
   }
 }

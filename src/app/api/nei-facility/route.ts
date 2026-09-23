@@ -63,7 +63,9 @@ export async function GET(request: Request) {
   const eisId = searchParams.get('eisId');
   const year = searchParams.get('year') || '2023';
 
-  if (!eisId) {
+  // EIS facility IDs are numeric. Validated because the ID goes into an ArcGIS
+  // where-clause, and encodeURIComponent does not escape the quote character.
+  if (!eisId || !/^\d+$/.test(eisId)) {
     return NextResponse.json({ found: false, emissions: [], haps: [] }, { status: 400 });
   }
 

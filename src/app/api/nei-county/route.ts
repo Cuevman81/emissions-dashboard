@@ -118,7 +118,9 @@ export async function GET(request: Request) {
     county = geo.county;
   }
 
-  if (!fips) {
+  // County FIPS codes are 1-5 digits. Validated because the value goes into an
+  // ArcGIS where-clause and the query string unescaped.
+  if (!fips || !/^\d{1,5}$/.test(fips)) {
     return NextResponse.json({ found: false, emissions: [] }, { status: 400 });
   }
 

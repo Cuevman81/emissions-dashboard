@@ -7,6 +7,7 @@ import { fetchNaaqsDesignValues, NaaqsDesignValue, Facility } from '@/lib/data-s
 interface FacilityInventoryTabProps {
   selectedState: string;
   allFacilities: Facility[];
+  rosterSource?: string;   // from /api/facilities X-Roster-Source
   isMounted: boolean;
   selectedSector: string | null;
   onSectorSelect: (sector: string | null) => void;
@@ -26,6 +27,7 @@ const DATA_SOURCE_META = [
 export default function FacilityInventoryTab({
   selectedState,
   allFacilities,
+  rosterSource = '',
   isMounted,
   selectedSector,
   onSectorSelect,
@@ -54,8 +56,13 @@ export default function FacilityInventoryTab({
     // NEI: triennial — last published is 2023
     const latestNei = '2023';
 
+    // "Live" only for a complete ECHO roster; fallbacks say what was served instead
+    const ECHO_LABELS: Record<string, string> = {
+      partial: 'Partial', stale: 'Cached', seed: 'Seed (Jun 2026)', tri: 'TRI only',
+    };
+
     const yearMap: Record<string, string> = {
-      echo: 'Live',
+      echo: ECHO_LABELS[rosterSource] || 'Live',
       tri: latestTri,
       nei: latestNei,
       camd: latestCamd,
@@ -63,7 +70,7 @@ export default function FacilityInventoryTab({
     };
 
     return DATA_SOURCE_META.map(ds => ({ ...ds, latestYear: yearMap[ds.key] }));
-  }, [allFacilities, aqsYear]);
+  }, [allFacilities, aqsYear, rosterSource]);
 
   // Fetch NAAQS data for attainment snapshot
   useEffect(() => {

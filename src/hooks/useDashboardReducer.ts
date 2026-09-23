@@ -15,6 +15,7 @@ export interface DashboardState {
   loading: boolean;
   isMounted: boolean;
   dataSource: string;
+  rosterSource: string;   // X-Roster-Source from /api/facilities: echo | partial | stale | seed | tri
 
   // Map state
   selectedState: string;
@@ -56,6 +57,7 @@ export const initialState: DashboardState = {
   loading: true,
   isMounted: false,
   dataSource: '',
+  rosterSource: '',
 
   selectedState: 'MS',
   center: null,
@@ -94,6 +96,7 @@ export type DashboardAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_MOUNTED' }
   | { type: 'SET_DATA_SOURCE'; payload: string }
+  | { type: 'SET_ROSTER_SOURCE'; payload: string }
 
   // Map state
   | { type: 'SET_STATE'; payload: string }
@@ -148,6 +151,8 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
       return { ...state, isMounted: true };
     case 'SET_DATA_SOURCE':
       return { ...state, dataSource: action.payload };
+    case 'SET_ROSTER_SOURCE':
+      return { ...state, rosterSource: action.payload };
 
     // Map state
     case 'SET_STATE':
@@ -217,6 +222,7 @@ function dashboardReducer(state: DashboardState, action: DashboardAction): Dashb
         activeTab: 'inventory',
         tabBeforeAutoSwitch: null,
         dataSource: '',
+        rosterSource: '',
         countyData: null,
         classIGeoJson: null,
         showClassI: false,

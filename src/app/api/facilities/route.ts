@@ -2,13 +2,19 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-function jsonResponse(data: any, status = 200) {
+// Where the roster came from, sent as X-Roster-Source so the UI only says "Live"
+// for a complete ECHO fetch: echo | partial (some ECHO pages missing) | stale
+// (expired cache after ECHO failed) | seed (bundled June 2026 file) | tri (Envirofacts only)
+type RosterSource = 'echo' | 'partial' | 'stale' | 'seed' | 'tri';
+
+function jsonResponse(data: any, status = 200, rosterSource?: RosterSource) {
   return NextResponse.json(data, {
     status,
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
+      ...(rosterSource ? { 'X-Roster-Source': rosterSource } : {}),
     }
   });
 }
@@ -160,7 +166,13 @@ try {
 // sequential pagination from silently blowing the budget.
 const ECHO_TOTAL_BUDGET_MS = 12000;
 
-async function fetchFromECHO(state: string) {
+// After ECHO fails, serve the fallback for a few minutes before trying ECHO again.
+// Fallbacks are no longer written to the 24h cache, so without this every request
+// would wait out the ECHO budget during an outage.
+const ECHO_RETRY_MS = 10 * 60 * 1000;
+const echoFailedAt: Record<string, number> = {};
+
+async function fetchFromECHO(state: string): Promise<{ facilities: EchoFacility[]; complete: boolean }> {
   const deadline = Date.now() + ECHO_TOTAL_BUDGET_MS;
   // Remaining budget, floored so we never hand AbortSignal.timeout a tiny/negative value.
   const remaining = () => Math.max(1500, deadline - Date.now());
@@ -181,7 +193,7 @@ async function fetchFromECHO(state: string) {
 
   // Some responses return facilities directly (small result sets)
   if (Array.isArray(results.Facilities) && results.Facilities.length > 0) {
-    return results.Facilities as EchoFacility[];
+    return { facilities: results.Facilities as EchoFacility[], complete: true };
   }
 
   // Otherwise paginate with QID
@@ -189,7 +201,7 @@ async function fetchFromECHO(state: string) {
   if (!queryId) throw new Error('No QueryID in ECHO response');
 
   const totalFound = parseInt(results.TotalFacilitiesFound || results.QueryRows || '0');
-  if (totalFound === 0) return [];
+  if (totalFound === 0) return { facilities: [], complete: true };
 
   const allFacilities: EchoFacility[] = [];
   const perPage = 1000;
@@ -214,9 +226,15 @@ async function fetchFromECHO(state: string) {
     const facilities = qidData?.Results?.Facilities || qidData?.Results?.Results || [];
     if (!Array.isArray(facilities) || facilities.length === 0) break;
     allFacilities.push(...facilities);
+    // ECHO may return every row on page 1 regardless of numrows
+    if (allFacilities.length >= totalFound) break;
   }
 
-  return allFacilities;
+  if (allFacilities.length === 0) throw new Error('ECHO returned no facility pages');
+  // Complete only when every facility ECHO counted (up to the page cap) has arrived
+  const complete = allFacilities.length >= Math.min(totalFound, maxPages * perPage);
+  if (!complete) console.warn(`[ECHO API] Received ${allFacilities.length} of ${totalFound} facilities; partial.`);
+  return { facilities: allFacilities, complete };
 }
 
 async function fetchTRIFallback(state: string) {
@@ -352,21 +370,29 @@ export async function GET(request: Request) {
         const cachedData = fs.readFileSync(cachePath, 'utf8');
         const facilities = JSON.parse(cachedData);
         attachNei2023Flags(facilities);
-        return jsonResponse(facilities);
+        // Only complete ECHO fetches are written to the cache
+        return jsonResponse(facilities, 200, 'echo');
       }
       console.log(`[Cache] Found stale cache for ${state}, attempting refresh...`);
     }
 
     let facilities: any[] = [];
     let success = false;
+    let rosterSource: RosterSource = 'echo';
 
     // 2. Fetch from EPA (with relaxed timeouts)
+    const echoBackoff = Date.now() - (echoFailedAt[state] ?? 0) < ECHO_RETRY_MS;
     try {
-      const raw = await fetchFromECHO(state);
+      if (echoBackoff) {
+        throw new Error('ECHO failed recently; waiting before retrying');
+      }
+      const { facilities: raw, complete } = await fetchFromECHO(state);
       facilities = parseEchoFacilities(raw, state);
-      console.log(`ECHO Success: ${facilities.length} facilities in ${state}`);
-      success = true;
+      console.log(`ECHO Success: ${facilities.length} facilities in ${state}${complete ? '' : ' (partial)'}`);
+      success = complete;
+      if (!complete) rosterSource = 'partial';
     } catch (err: any) {
+      if (!echoBackoff) echoFailedAt[state] = Date.now();
       console.warn(`ECHO Failed: ${err.message}. Attempting stale cache or seed file fallback.`);
       
       // Try loading stale cache from disk if it exists (even if expired)
@@ -375,7 +401,7 @@ export async function GET(request: Request) {
           const staleData = fs.readFileSync(cachePath, 'utf8');
           facilities = JSON.parse(staleData);
           console.log(`[Cache Fallback] Loaded ${facilities.length} records from stale cache after ECHO failure.`);
-          success = true;
+          rosterSource = 'stale';
         } catch (cacheErr) {
           console.error('[Cache Fallback] Failed to read stale cache:', cacheErr);
         }
@@ -389,7 +415,7 @@ export async function GET(request: Request) {
             const seedData = fs.readFileSync(seedPath, 'utf8');
             facilities = JSON.parse(seedData);
             console.log(`[Seed Fallback] Loaded ${facilities.length} records from local seed file after ECHO failure.`);
-            success = true;
+            rosterSource = 'seed';
           } catch (seedErr) {
             console.error('[Seed Fallback] Failed to read seed file:', seedErr);
           }
@@ -399,7 +425,7 @@ export async function GET(request: Request) {
       // If both are missing/failed, fall back to live TRI query
       if (facilities.length === 0) {
         facilities = await fetchTRIFallback(state);
-        if (facilities.length > 0) success = true;
+        rosterSource = 'tri';
       }
     }
 
@@ -420,23 +446,25 @@ export async function GET(request: Request) {
     // 4.5. Attach hasNei2023 availability
     attachNei2023Flags(facilities);
 
-    // 5. Save to cache if we got anything useful
+    // 5. Cache only a complete ECHO roster. Partial pages and fallbacks are served
+    // (labelled) but never re-cached as fresh.
     if (success && facilities.length > 0) {
+       delete echoFailedAt[state];
        console.log(`[Cache] Saving ${facilities.length} records to ${state} facility cache.`);
        try {
          fs.writeFileSync(cachePath, JSON.stringify(facilities), 'utf8');
        } catch (cacheErr) {
          console.warn('[Cache] Failed to write facilities cache:', cacheErr);
        }
-    } else if (fs.existsSync(cachePath)) {
+    } else if (facilities.length === 0 && fs.existsSync(cachePath)) {
        console.warn(`[Cache] Falling back to stale cache due to EPA failure.`);
        const staleData = fs.readFileSync(cachePath, 'utf8');
        const facilities = JSON.parse(staleData);
        attachNei2023Flags(facilities);
-       return jsonResponse(facilities);
+       return jsonResponse(facilities, 200, 'stale');
     }
 
-    return jsonResponse(facilities);
+    return jsonResponse(facilities, 200, rosterSource);
   } catch (err: any) {
     console.error('Facilities fetch completely failed:', err);
     // Ultimate fallback: return empty or check if cache exists regardless of age
@@ -444,7 +472,7 @@ export async function GET(request: Request) {
        const staleData = fs.readFileSync(cachePath, 'utf8');
        const facilities = JSON.parse(staleData);
        attachNei2023Flags(facilities);
-       return jsonResponse(facilities);
+       return jsonResponse(facilities, 200, 'stale');
     }
     return jsonResponse([]);
   }

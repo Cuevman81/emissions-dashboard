@@ -28,7 +28,7 @@ const RadiusMap = dynamic(() => import('@/components/RadiusMap'), { ssr: false }
 export default function EmissionsDashboard() {
   const { state, dispatch, refs, handleFacilityClose, handleMonitorClose } = useDashboardReducer();
   const {
-    allFacilities, loading, isMounted, dataSource,
+    allFacilities, loading, isMounted, dataSource, rosterSource,
     selectedState, center, radiusMi, selectedFacility, selectedMonitor,
     showAll, mapFilter, mapTriYear, selectedSector, activeTab,
     neiYear, neiData, neiLoading, countyData, countyLoading, neiSyncStatus,
@@ -103,7 +103,12 @@ export default function EmissionsDashboard() {
     const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     fetch(`/api/facilities?state=${selectedState}&v=1.0.2`, { signal: controller.signal })
-      .then(res => { clearTimeout(timeoutId); if (!res.ok) throw new Error('API Response Error'); return res.json(); })
+      .then(res => {
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error('API Response Error');
+        dispatch({ type: 'SET_ROSTER_SOURCE', payload: res.headers.get('X-Roster-Source') || '' });
+        return res.json();
+      })
       .then(data => {
         dispatch({ type: 'SET_FACILITIES', payload: data });
         if (data.length > 0) dispatch({ type: 'SET_DATA_SOURCE', payload: data[0].dataSource || '' });
@@ -659,6 +664,7 @@ export default function EmissionsDashboard() {
                   <FacilityInventoryTab
                     selectedState={selectedState}
                     allFacilities={allFacilities}
+                    rosterSource={rosterSource}
                     isMounted={isMounted}
                     selectedSector={selectedSector}
                     onSectorSelect={setSelectedSector}

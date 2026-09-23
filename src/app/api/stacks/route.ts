@@ -214,38 +214,12 @@ export async function GET(request: Request) {
     }
   }
 
-  // --- Path 2: Try NEI/EIS efservice (EIS_RELEASE_POINT) ---
-  const url = `https://data.epa.gov/efservice/EIS_RELEASE_POINT/FACILITY_REGISTRY_ID/equals/${encodeURIComponent(registryId)}/JSON`;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0 && !data[0]?.error) {
-        const stacks = data
-          .map((item: any) => ({
-            stackId: item.RELEASE_POINT_ID || 'N/A',
-            height: parseFloat(item.STACK_HEIGHT_VALUE) || 0,
-            diameter: parseFloat(item.STACK_DIAMETER_VALUE) || 0,
-            temp: item.EXIT_GAS_TEMPERATURE_VALUE != null ? parseFloat(item.EXIT_GAS_TEMPERATURE_VALUE) : undefined,
-            velocity: item.EXIT_GAS_VELOCITY_VALUE != null ? parseFloat(item.EXIT_GAS_VELOCITY_VALUE) : undefined,
-            flowRate: item.EXIT_GAS_FLOW_RATE_VALUE != null ? parseFloat(item.EXIT_GAS_FLOW_RATE_VALUE) : undefined,
-            description: item.RELEASE_POINT_DESCRIPTION || 'Point Source',
-            dataSource: 'NEI' as const,
-            dataYear: item.INVENTORY_YEAR ? String(item.INVENTORY_YEAR) : '2020',
-          }))
-          .filter(s => s.height > 0);
-
-        if (stacks.length > 0) {
-          return NextResponse.json(stacks);
-        }
-      }
-    }
-  } catch {
-    // ignore and check fallback
-  }
-
-  // No stack data found via APIs — return RSEI median industry fallback
+  // --- Path 2: RSEI median industry fallback ---
+  // Non-EGUs (and EGUs CAMD had nothing for) get estimates. Envirofacts retired
+  // EIS_RELEASE_POINT (it answers 404 "The table is not available.", checked
+  // 2026-09-23), so there is no per-facility release-point query to try first.
+  // The keyless alternative, the national 2023 NEI SMOKE point flat file
+  // (gaftp.epa.gov/Air/nei/2023/flat_files, 253 MB zip), is too big to fetch here.
   console.log(`Stacks: returning fallback for registryId ${registryId} (naics: ${naics}, sector: ${sector})`);
   const fallbackStacks = getFallbackIndustryStacks(naics, sector);
   return NextResponse.json(fallbackStacks);

@@ -65,8 +65,8 @@ export interface StackParameter {
   velocity?: number;
   flowRate?: number;
   description?: string;
-  dataSource?: 'CAMD' | 'NEI' | 'Estimate' | 'User';  // where the stack data came from
-  dataYear?: string;                                     // year of the source data (e.g. '2020' for NEI)
+  dataSource?: 'CAMD' | 'Estimate' | 'User';  // where the stack data came from
+  dataYear?: string;                             // year of the source data (e.g. the CAMD monitor-plan year)
 }
 
 export interface ToxicChemical {
@@ -262,7 +262,7 @@ export async function fetchNeiCounty(lat: number, lon: number): Promise<NeiCount
 }
 
 /**
- * Fetch Stack Parameters (EIS Release Points) for a facility
+ * Fetch Stack Parameters for a facility (CAMD monitor plans for EGUs, else RSEI industry-median estimates)
  */
 export async function fetchStackParameters(facilityId: string): Promise<StackParameter[]> {
   try {

@@ -107,7 +107,7 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-slate-400 italic py-4">
           <div className="h-3 w-3 border-2 border-blue-600 border-t-transparent animate-spin rounded-full" />
-          Querying EPA EIS database...
+          Loading stack parameters...
         </div>
       ) : stacks.length > 0 ? (
         <div className="space-y-3">
@@ -128,11 +128,6 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
                   {s.dataSource === 'CAMD' && (
                     <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 border border-orange-200">
                       Source: CAMD/CAMPD · {s.dataYear || 'Live'}
-                    </span>
-                  )}
-                  {s.dataSource === 'NEI' && (
-                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
-                      Source: NEI/EIS · {s.dataYear || '2020'}
                     </span>
                   )}
                   {s.dataSource === 'Estimate' && (

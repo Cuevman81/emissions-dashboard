@@ -27,14 +27,15 @@ jobs:
         env:
           EPA_CAMD_API_KEY: ${{ secrets.EPA_CAMD_API_KEY }}
         run: |
-          # The script exits with code 10 if updates are available, 0 if up-to-date, or 1 on error
-          node scripts/check-updates.js && echo "exit_code=0" >> $GITHUB_OUTPUT || exit_code=$?
-          if [ -n "$exit_code" ]; then
-            echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-          fi
+          # Exit codes: 0 = up to date, 10 = updates available, 1 = a check failed,
+          # 11 = updates available and a check failed. Record it here; the last step
+          # fails the run on 1, 11 or anything unexpected.
+          set +e
+          node scripts/check-updates.js
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Issue if updates are available
-        if: steps.check.outputs.exit_code == '10'
+        if: steps.check.outputs.exit_code == '10' || steps.check.outputs.exit_code == '11'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -46,3 +47,11 @@ jobs:
           else
             echo "An open update issue already exists (Issue #${existing_issue}). Skipping duplicate creation."
           fi
+
+      - name: Fail the run if any check failed
+        if: steps.check.outputs.exit_code != '0' && steps.check.outputs.exit_code != '10'
+        env:
+          EXIT_CODE: ${{ steps.check.outputs.exit_code }}
+        run: |
+          echo "::error::A data freshness check failed (exit code ${EXIT_CODE}). See the 'Run data freshness check' step log."
+          exit 1

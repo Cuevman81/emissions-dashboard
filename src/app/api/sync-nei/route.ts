@@ -5,7 +5,7 @@ import { spawn } from 'child_process';
 import https from 'https';
 import csvParser from 'csv-parser';
 
-const ZIP_URL = 'https://gaftp.epa.gov/Air/nei/2023/data_summaries/eis_report_37583_2023NEI_facility_summary.zip';
+const NEI_DIR = 'https://gaftp.epa.gov/Air/nei/2023/data_summaries/';
 const METADATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_metadata.json');
 const DATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_MS.json');
 const SCRATCH_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'scratch');
@@ -17,6 +17,20 @@ try {
   }
 } catch (err) {
   console.warn('[Sync NEI] Failed to ensure scratch directory exists:', err);
+}
+
+// EPA renames the facility summary zip on each re-release (eis_report_37583_... became
+// eis_report_38234_..._21jul2026.zip on 22 Jul 2026), so find the current one by listing
+// the folder. The CSV inside carries the same report number (emis_sum_fac_<n>.csv).
+async function findNeiSummary(): Promise<{ zipUrl: string; csvName: string }> {
+  const res = await fetch(NEI_DIR, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`GAFTP listing returned ${res.status}`);
+  const html = await res.text();
+  const names = [...html.matchAll(/href="(eis_report_(\d+)_2023NEI_facility_summary[^"]*\.zip)"/g)]
+    .sort((a, b) => Number(a[2]) - Number(b[2]));
+  const newest = names[names.length - 1];
+  if (!newest) throw new Error('No 2023 NEI facility summary zip in the GAFTP listing');
+  return { zipUrl: NEI_DIR + newest[1], csvName: `emis_sum_fac_${newest[2]}.csv` };
 }
 
 export async function GET(request: Request) {
@@ -39,7 +53,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const headRes = await fetch(ZIP_URL, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+    const { zipUrl } = await findNeiSummary();
+    const headRes = await fetch(zipUrl, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
     if (!headRes.ok) throw new Error(`GAFTP HEAD request returned ${headRes.status}`);
 
     const lastModified = headRes.headers.get('last-modified') || '';
@@ -83,14 +98,15 @@ export async function POST() {
 
   try {
     console.log('[Sync Process] Checking headers first...');
-    const headRes = await fetch(ZIP_URL, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+    const { zipUrl, csvName } = await findNeiSummary();
+    const headRes = await fetch(zipUrl, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
     const lastModified = headRes.ok ? (headRes.headers.get('last-modified') || '') : '';
 
-    console.log('[Sync Process] Downloading ZIP file from GAFTP...');
-    await downloadFile(ZIP_URL, TEMP_ZIP);
+    console.log(`[Sync Process] Downloading ${zipUrl} from GAFTP...`);
+    await downloadFile(zipUrl, TEMP_ZIP);
     console.log('[Sync Process] Download complete. Streaming unzip and parsing...');
 
-    const count = await parseAndFilterNeiZip(TEMP_ZIP, DATA_PATH);
+    const count = await parseAndFilterNeiZip(TEMP_ZIP, DATA_PATH, csvName);
 
     // Save metadata
     fs.writeFileSync(METADATA_PATH, JSON.stringify({
@@ -146,9 +162,9 @@ function downloadFile(url: string, dest: string): Promise<void> {
   });
 }
 
-function parseAndFilterNeiZip(zipPath: string, destJsonPath: string): Promise<number> {
+function parseAndFilterNeiZip(zipPath: string, destJsonPath: string, csvName: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    const unzipProcess = spawn('unzip', ['-p', zipPath, 'emis_sum_fac_37583.csv']);
+    const unzipProcess = spawn('unzip', ['-p', zipPath, csvName]);
     const facilities: Record<string, any> = {};
 
     unzipProcess.stdout
@@ -220,6 +236,12 @@ function parseAndFilterNeiZip(zipPath: string, destJsonPath: string): Promise<nu
           f.haps.sort((a: any, b: any) => b.amount - a.amount);
         }
 
+        // An unmatched CSV name makes unzip print nothing: never overwrite the
+        // dataset with an empty result.
+        if (Object.keys(facilities).length === 0) {
+          reject(new Error(`No MS facilities parsed from ${csvName}; the zip layout may have changed`));
+          return;
+        }
         fs.writeFileSync(destJsonPath, JSON.stringify(facilities, null, 2), 'utf8');
         resolve(Object.keys(facilities).length);
       })

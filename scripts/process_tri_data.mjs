@@ -98,12 +98,15 @@ async function processData() {
                 facilityEmissions.yearsMap.set(year, new Map());
             }
 
-            // We only care about Total Air Releases (TOT_AIR10) in pounds
+            // We only care about Total Air Releases (TOT_AIR10): pounds, except dioxin and
+            // dioxin-like compounds (DIOXIN = 'Y'), which TRI reports in grams
             const totalAir = parseFloat(row.TOT_AIR10 || '0');
             if (totalAir > 0) {
                 const chemName = row.CHEM_NAME;
-                // conversion to short tons (lbs / 2000) match haps route
-                const amountTons = Math.round((totalAir / 2000) * 10000) / 10000;
+                const lbs = row.DIOXIN === 'Y' || /dioxin/i.test(chemName || '') ? totalAir / 453.59237 : totalAir;
+                // conversion to short tons (lbs / 2000) match haps route; full precision
+                // (rounding to 4 decimals of a ton turned small lead/dioxin releases into 0)
+                const amountTons = lbs / 2000;
 
                 const yearMap = facilityEmissions.yearsMap.get(year);
                 // Sum across records for same chemical

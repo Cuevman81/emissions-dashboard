@@ -12,7 +12,7 @@ import {
   AqsMonitor,
   getNearestMonitor,
 } from '@/lib/data-service';
-import { shortenChemicalName } from '@/lib/constants';
+import { shortenChemicalName, GRAMS_PER_LB, isTriDioxin } from '@/lib/constants';
 
 interface ToxicsTabProps {
   selectedFacility: Facility;
@@ -200,7 +200,11 @@ export default function ToxicsTab({
                 const tonsVal = isTons ? h.amount : h.amount / 2000;
                 const lbsVal = isTons ? h.amount * 2000 : h.amount;
                 const formattedTons = tonsVal === 0 ? '0' : (tonsVal < 0.0001 ? '<0.0001' : tonsVal.toLocaleString(undefined, { maximumFractionDigits: 4 }));
-                const formattedLbs = lbsVal === 0 ? '0' : (lbsVal < 0.1 ? '<0.1' : lbsVal.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+                // Dioxins are reported to TRI in grams; show them in g/yr rather than a tiny lb figure
+                const isDioxin = isTriDioxin(h.pollutant);
+                const smallVal = isDioxin ? lbsVal * GRAMS_PER_LB : lbsVal;
+                const smallUnit = isDioxin ? 'g/yr' : 'lbs/yr';
+                const formattedLbs = smallVal === 0 ? '0' : (smallVal < 0.01 ? '<0.01' : smallVal.toLocaleString(undefined, { maximumFractionDigits: isDioxin ? 3 : 2 }));
                 return (
                   <div key={i} className="flex items-center justify-between bg-purple-50/50 p-2 rounded border border-purple-100 hover:border-purple-200 transition-colors">
                     <span className="text-xs font-medium text-slate-700 pr-2">{h.pollutant}</span>
@@ -209,7 +213,7 @@ export default function ToxicsTab({
                         {formattedTons} <span className="font-normal text-[9px] text-slate-500">Tons/Yr</span>
                       </div>
                       <div className="text-[10px] font-semibold text-slate-500 mt-0.5">
-                        {formattedLbs} <span className="font-normal text-[9px] text-slate-400">lbs/yr</span>
+                        {formattedLbs} <span className="font-normal text-[9px] text-slate-400">{smallUnit}</span>
                       </div>
                     </div>
                   </div>

@@ -136,8 +136,10 @@ async function syncTRI() {
     const chemName = row.cas_chem_name;
 
     if (airTotalRelease > 0 && chemName) {
-      // Convert to short tons (lbs / 2000) with 4 decimal places
-      const amountTons = Math.round((airTotalRelease / 2000) * 10000) / 10000;
+      // Envirofacts air_total_release is in lb for every chemical, dioxins included
+      // (unlike the TRI basic data files, which give dioxins in grams). Convert to short
+      // tons at full precision: rounding to 4 decimals turned small releases into 0.
+      const amountTons = airTotalRelease / 2000;
 
       if (!yearlyEmissionsMap.has(triId)) {
         yearlyEmissionsMap.set(triId, new Map());

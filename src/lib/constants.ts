@@ -104,3 +104,12 @@ export function shortenChemicalName(name: string): string {
   
   return n;
 }
+
+// The TRI basic data files report dioxin and dioxin-like compounds in GRAMS, every
+// other chemical in pounds (TRI Basic Data Files Documentation, Aug 2024, "UNIT OF
+// MEASURE"); Envirofacts' air_total_release is in pounds for all. The app stores lb-based
+// tons for every chemical and shows dioxins in grams.
+export const GRAMS_PER_LB = 453.59237;
+export function isTriDioxin(chemName: string | null | undefined): boolean {
+  return /dioxin/i.test(chemName ?? '');
+}

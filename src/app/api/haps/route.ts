@@ -10,7 +10,9 @@ import path from 'path';
 // Step 2: TRI_FORM_R — one record per doc_ctrl_num (one Form R filing)
 //   Filter by DOC_CTRL_NUM → get air_total_release (pounds, stack + fugitive combined)
 //
-// Convert: lbs ÷ 2000 = short tons
+// Convert: lbs ÷ 2000 = short tons. Envirofacts stores air_total_release in lb for
+// every chemical, dioxins included (the TRI basic data files report dioxins in grams;
+// checked 2026-09-22: MS RY2024 dioxin forms, CSV grams / Envirofacts value = 454.0).
 // TRI Form R always reports ACTUAL releases (not PTE)
 
 interface TRIFormRecord {
@@ -171,7 +173,8 @@ export async function GET(request: Request) {
       .filter(r => r.airRelease > 0)
       .map(r => ({
         pollutant: chemMap[r.dcn] || r.dcn,
-        amount: Math.round((r.airRelease / 2000) * 10000) / 10000, // lbs → tons, 4 decimal places
+        // Full precision: rounding here turned small lead/dioxin releases into 0
+        amount: r.airRelease / 2000,
         unit: 'Tons/Year',
         year: maxYear,
         emissionsType: 'actual' as const,

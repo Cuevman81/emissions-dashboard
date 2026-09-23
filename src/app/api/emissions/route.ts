@@ -5,28 +5,64 @@ import path from 'path';
 const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+const CAMPD_BASE = 'https://api.epa.gov/easey/emissions-mgmt/emissions/apportioned';
+const TRAILING_YEARS = 6;
+
+function campdHeaders(): HeadersInit {
+  const headers: HeadersInit = { 'Accept': 'application/json' };
+  const apiKey = process.env.EPA_CAMD_API_KEY || '';
+  if (apiKey) headers['x-api-key'] = apiKey;
+  return headers;
+}
+
+// CAMPD's "annual" endpoint returns YEAR-TO-DATE totals for a year still in
+// progress (in Sept 2026 the API serves quarters only through "the quarter ending
+// on 06/30/2026"), so only completed calendar years are valid annual actuals.
+// Part 75 sources submit each quarter within 30 days of its end (Q4 is due Jan 30;
+// CAMD's Power Sector Emissions Data Guide), so last year counts as complete only
+// once CAMPD serves its Q4 data.
+let lastYearQ4: { year: number; posted: boolean; checkedAt: number } | null = null;
+const Q4_RECHECK_MS = 6 * 60 * 60 * 1000;
+
+async function isYearComplete(year: number): Promise<boolean> {
+  if (lastYearQ4 && lastYearQ4.year === year && (lastYearQ4.posted || Date.now() - lastYearQ4.checkedAt < Q4_RECHECK_MS)) {
+    return lastYearQ4.posted;
+  }
+  try {
+    const res = await fetch(`${CAMPD_BASE}/quarterly?year=${year}&quarter=4&page=1&perPage=1`, {
+      headers: campdHeaders(),
+      signal: AbortSignal.timeout(8000),
+    });
+    let posted: boolean;
+    if (res.ok) {
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : data?.items;
+      posted = Array.isArray(items) && items.length > 0;
+    } else if (res.status === 400) {
+      posted = false; // CAMPD rejects quarters after the latest one it has published
+    } else {
+      throw new Error(`CAMPD quarterly HTTP ${res.status}`);
+    }
+    lastYearQ4 = { year, posted, checkedAt: Date.now() };
+    return posted;
+  } catch {
+    // CAMPD unreachable: assume Q4 is posted once February is over.
+    return new Date() >= new Date(Date.UTC(year + 1, 2, 1));
+  }
+}
+
 // CAMPD annual emissions endpoint — EGUs (power plants) only
 // Fields returned: so2Mass (tons), noxMass (tons), co2Mass (short tons)
-async function fetchHistoricalCamdEmissions(orisCode: string): Promise<Record<string, { pollutant: string; amount: number; unit: string; emissionsType: 'actual' }[]>> {
-  const years = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+async function fetchHistoricalCamdEmissions(orisCode: string, years: number[]): Promise<Record<string, { pollutant: string; amount: number; unit: string; emissionsType: 'actual' }[]>> {
   const results: Record<string, { pollutant: string; amount: number; unit: string; emissionsType: 'actual' }[]> = {};
-
-  const apiKey = process.env.EPA_CAMD_API_KEY || '';
 
   await Promise.all(
     years.map(async (year) => {
       try {
-        const url = `https://api.epa.gov/easey/emissions-mgmt/emissions/apportioned/annual?facilityId=${orisCode}&year=${year}&page=1&perPage=100`;
-        
-        const headers: HeadersInit = {
-          'Accept': 'application/json',
-        };
-        if (apiKey) {
-          headers['x-api-key'] = apiKey;
-        }
+        const url = `${CAMPD_BASE}/annual?facilityId=${orisCode}&year=${year}&page=1&perPage=100`;
 
         const res = await fetch(url, { 
-          headers,
+          headers: campdHeaders(),
           signal: AbortSignal.timeout(8000) 
         });
         if (!res.ok) return;
@@ -73,8 +109,8 @@ export async function GET(request: Request) {
 
   // EGU path — real CEMS data from CAMPD
   if (camdId) {
-    // 1. Check cache first
-    const cacheKey = `emissions_${camdId}.json`;
+    // 1. Check cache first (v2: older cache files hold year-to-date totals as the newest year)
+    const cacheKey = `emissions_v2_${camdId}.json`;
     const cachePath = path.join(CACHE_DIR, cacheKey);
 
     if (fs.existsSync(cachePath)) {
@@ -90,8 +126,12 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2. Fetch fresh historical CAMD data in parallel
-    const historicalEmissions = await fetchHistoricalCamdEmissions(camdId);
+    // 2. Fetch fresh historical CAMD data in parallel: the trailing complete years only
+    const lastFullYear = new Date().getUTCFullYear() - 1;
+    const lastYearComplete = await isYearComplete(lastFullYear);
+    const newestYear = lastYearComplete ? lastFullYear : lastFullYear - 1;
+    const years = Array.from({ length: TRAILING_YEARS }, (_, i) => newestYear - TRAILING_YEARS + 1 + i);
+    const historicalEmissions = await fetchHistoricalCamdEmissions(camdId, years);
     const availableYears = Object.keys(historicalEmissions).map(Number);
 
     if (availableYears.length > 0) {
@@ -106,15 +146,18 @@ export async function GET(request: Request) {
         historicalEmissions,
       };
 
-      // Save to cache
-      try {
-        if (!fs.existsSync(CACHE_DIR)) {
-          fs.mkdirSync(CACHE_DIR, { recursive: true });
+      // Save to cache — but not while last year's Q4 is still pending, so the
+      // completed year appears as soon as CAMPD publishes it
+      if (lastYearComplete) {
+        try {
+          if (!fs.existsSync(CACHE_DIR)) {
+            fs.mkdirSync(CACHE_DIR, { recursive: true });
+          }
+          fs.writeFileSync(cachePath, JSON.stringify(payload), 'utf8');
+          console.log(`[Cache] Saved CAMD emissions for ${camdId} to disk.`);
+        } catch (cacheErr) {
+          console.error('Failed to write CAMD emissions cache:', cacheErr);
         }
-        fs.writeFileSync(cachePath, JSON.stringify(payload), 'utf8');
-        console.log(`[Cache] Saved CAMD emissions for ${camdId} to disk.`);
-      } catch (cacheErr) {
-        console.error('Failed to write CAMD emissions cache:', cacheErr);
       }
 
       return NextResponse.json(payload);

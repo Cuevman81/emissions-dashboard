@@ -38,6 +38,10 @@ src/cache/
 # project specific exclusions
 /backups
 /scratch
+# One-off API probe scripts stay local. Any script that calls an EPA API must read
+# credentials from process.env (node --env-file=.env.local <script>), never inline them.
+/check_*.mjs
+/test_*.mjs
 /src/logs
 .claude/
 /update_details.txt

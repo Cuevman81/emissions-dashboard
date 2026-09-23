@@ -1,5 +1,11 @@
-const AQS_EMAIL = 'RCuevas@mdeq.ms.gov';
-const AQS_KEY = 'greyhawk63';
+// One-off AQS API probe. Credentials come from the environment, never from this file:
+//   node --env-file=.env.local test_ms_aqs.mjs
+const AQS_EMAIL = process.env.AQS_EMAIL;
+const AQS_KEY = process.env.AQS_KEY;
+if (!AQS_EMAIL || !AQS_KEY) {
+  console.error('AQS_EMAIL and AQS_KEY must be set, e.g. node --env-file=.env.local test_ms_aqs.mjs');
+  process.exit(1);
+}
 
 async function testJacksonSite() {
   const email = AQS_EMAIL;

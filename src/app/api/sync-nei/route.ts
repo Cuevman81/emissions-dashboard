@@ -11,6 +11,13 @@ const DATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_MS.json');
 const SCRATCH_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'scratch');
 const TEMP_ZIP = path.join(SCRATCH_DIR, 'nei_2023_temp.zip');
 
+// Stack parameters come from a different NEI file, the national point flat file, which
+// scripts/sync_nei_stacks.mjs downloads (~253 MB) and reduces to the MS release points.
+const FLAT_DIR = 'https://gaftp.epa.gov/Air/nei/2023/flat_files/';
+const STACKS_DATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_stacks_MS.json');
+const STACKS_METADATA_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_stacks_metadata.json');
+const STACKS_SCRIPT = path.join(process.cwd(), 'scripts', 'sync_nei_stacks.mjs');
+
 try {
   if (!fs.existsSync(SCRATCH_DIR)) {
     fs.mkdirSync(SCRATCH_DIR, { recursive: true });
@@ -33,6 +40,55 @@ async function findNeiSummary(): Promise<{ zipUrl: string; csvName: string }> {
   return { zipUrl: NEI_DIR + newest[1], csvName: `emis_sum_fac_${newest[2]}.csv` };
 }
 
+// Newest point flat file (SmokeFlatFile_POINT_<yyyymmdd>.zip) and its Last-Modified.
+async function findPointFile(): Promise<{ file: string; lastModified: string }> {
+  const res = await fetch(FLAT_DIR, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error(`GAFTP flat_files listing returned ${res.status}`);
+  const names = [...(await res.text()).matchAll(/href="(SmokeFlatFile_POINT_(\d{8})\.zip)"/g)]
+    .sort((a, b) => Number(a[2]) - Number(b[2]));
+  const newest = names[names.length - 1];
+  if (!newest) throw new Error('No SmokeFlatFile_POINT_*.zip in the GAFTP flat_files listing');
+  const headRes = await fetch(FLAT_DIR + newest[1], { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+  if (!headRes.ok) throw new Error(`GAFTP HEAD ${newest[1]} returned ${headRes.status}`);
+  return { file: newest[1], lastModified: headRes.headers.get('last-modified') || '' };
+}
+
+interface SyncMetadata {
+  lastModified?: string;
+  recordCount?: number;   // nei_2023_metadata.json
+  file?: string;          // nei_2023_stacks_metadata.json
+  stackCount?: number;
+  facilityCount?: number;
+}
+
+function readJson(p: string): SyncMetadata | null {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
+}
+
+const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+// The stack dataset is stale when it is missing or was built from another file version.
+async function checkStacks() {
+  const exists = fs.existsSync(STACKS_DATA_PATH);
+  const local = exists ? readJson(STACKS_METADATA_PATH) : null;
+  try {
+    const remote = await findPointFile();
+    const stale = !local || local.file !== remote.file || local.lastModified !== remote.lastModified;
+    return { stale, remote, localModified: local?.lastModified || '', exists, error: undefined as string | undefined };
+  } catch (err) {
+    return { stale: !exists, remote: null, localModified: local?.lastModified || '', exists, error: errorMessage(err) };
+  }
+}
+
+// Runs the offline extraction script; it writes the dataset and metadata atomically.
+function runStacksScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [STACKS_SCRIPT], { cwd: process.cwd(), stdio: ['ignore', 'inherit', 'inherit'] });
+    child.on('error', reject);
+    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`sync_nei_stacks.mjs exited with code ${code}`)));
+  });
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const checkOnly = searchParams.get('checkOnly') === 'true';
@@ -52,6 +108,19 @@ export async function GET(request: Request) {
     });
   }
 
+  // The two NEI files are checked in parallel: the client gives this check 3 seconds.
+  const stacksCheck = checkStacks();
+  const stacksFields = async () => {
+    const st = await stacksCheck;
+    return {
+      stacksUpdateAvailable: st.stale,
+      stacksLastModified: st.remote?.lastModified || '',
+      stacksLocalModified: st.localModified,
+      stacksDatabaseExists: st.exists,
+      ...(st.error ? { stacksError: st.error } : {}),
+    };
+  };
+
   try {
     const { zipUrl } = await findNeiSummary();
     const headRes = await fetch(zipUrl, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
@@ -68,25 +137,32 @@ export async function GET(request: Request) {
       } catch {}
     }
 
-    const updateAvailable = !localModified || (lastModified && localModified !== lastModified);
+    const facilitiesUpdateAvailable = !localModified || (lastModified && localModified !== lastModified);
+    const stacks = await stacksFields();
     return NextResponse.json({
-      updateAvailable,
+      updateAvailable: !!facilitiesUpdateAvailable || stacks.stacksUpdateAvailable,
+      facilitiesUpdateAvailable: !!facilitiesUpdateAvailable,
       lastModified,
       localModified,
-      databaseExists: fs.existsSync(DATA_PATH)
+      databaseExists: fs.existsSync(DATA_PATH),
+      ...stacks,
     });
   } catch (err: any) {
     console.error('[Sync Check] Failed to check for NEI 2023 updates:', err.message);
     const exists = fs.existsSync(DATA_PATH);
+    const stacks = await stacksFields();
     return NextResponse.json({
-      updateAvailable: !exists,
+      updateAvailable: !exists || stacks.stacksUpdateAvailable,
       error: err.message,
-      databaseExists: exists
+      databaseExists: exists,
+      ...stacks,
     });
   }
 }
 
-export async function POST() {
+// Syncs whichever NEI dataset is stale (both with ?force=true): the facility summary
+// (emissions, ~39 MB zip) and the release-point stacks (~253 MB zip), in parallel.
+export async function POST(request: Request) {
   // Read-only filesystem on Vercel — the sync can never persist. Refuse early
   // instead of downloading a ~100MB zip per (unauthenticated) request.
   if (process.env.VERCEL) {
@@ -95,12 +171,50 @@ export async function POST() {
       { status: 501 }
     );
   }
+  const force = new URL(request.url).searchParams.get('force') === 'true';
 
+  // One rebuild at a time: dev mode runs the page's sync effect twice, and a second
+  // request must not start a second 253 MB download into the same temp file.
+  stacksSyncInFlight ??= syncStacks(force).finally(() => { stacksSyncInFlight = null; });
+  const stacksPart = stacksSyncInFlight;
+
+  const facilitiesPart = syncFacilitySummary(force);
+  const [facilities, stacks] = await Promise.all([facilitiesPart, stacksPart]);
+  const success = facilities.success && stacks.status !== 'failed';
+  return NextResponse.json({ ...facilities, success, stacks }, { status: success ? 200 : 500 });
+}
+
+type StacksSyncResult =
+  | { status: 'up-to-date'; file?: string }
+  | { status: 'synced'; file?: string; count?: number; facilities?: number }
+  | { status: 'failed'; error: string };
+let stacksSyncInFlight: Promise<StacksSyncResult> | null = null;
+
+async function syncStacks(force: boolean): Promise<StacksSyncResult> {
+  const st = await checkStacks();
+  if (!force && !st.stale) return { status: 'up-to-date', file: st.remote?.file };
+  try {
+    console.log('[Sync Process] Rebuilding NEI stack parameters from the point flat file...');
+    await runStacksScript();
+    const meta = readJson(STACKS_METADATA_PATH);
+    return { status: 'synced', file: meta?.file, count: meta?.stackCount, facilities: meta?.facilityCount };
+  } catch (err) {
+    console.error('[Sync Process] NEI stack sync failed:', errorMessage(err));
+    return { status: 'failed', error: errorMessage(err) };
+  }
+}
+
+async function syncFacilitySummary(force: boolean) {
   try {
     console.log('[Sync Process] Checking headers first...');
     const { zipUrl, csvName } = await findNeiSummary();
     const headRes = await fetch(zipUrl, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
     const lastModified = headRes.ok ? (headRes.headers.get('last-modified') || '') : '';
+
+    const meta = fs.existsSync(DATA_PATH) ? readJson(METADATA_PATH) : null;
+    if (!force && meta?.lastModified && lastModified && meta.lastModified === lastModified) {
+      return { success: true, facilities: 'up-to-date', count: meta.recordCount, lastModified };
+    }
 
     console.log(`[Sync Process] Downloading ${zipUrl} from GAFTP...`);
     await downloadFile(zipUrl, TEMP_ZIP);
@@ -132,13 +246,13 @@ export async function POST() {
     }
 
     console.log(`[Sync Process] Successfully synchronized ${count} facilities for 2023 NEI.`);
-    return NextResponse.json({ success: true, count, lastModified });
+    return { success: true, facilities: 'synced', count, lastModified };
   } catch (err: any) {
     console.error('[Sync Process] Synchronization failed:', err);
     if (fs.existsSync(TEMP_ZIP)) {
       try { fs.unlinkSync(TEMP_ZIP); } catch {}
     }
-    return NextResponse.json({ success: false, error: err.message || String(err) }, { status: 500 });
+    return { success: false, facilities: 'failed', error: err.message || String(err) };
   }
 }
 

@@ -3,6 +3,9 @@ const path = require('path');
 
 const NEI_DIR = 'https://gaftp.epa.gov/Air/nei/2023/data_summaries/';
 const METADATA_PATH = path.join(__dirname, '..', 'src', 'lib', 'nei_2023_metadata.json');
+// Stack parameters come from the NEI point flat file (scripts/sync_nei_stacks.mjs)
+const NEI_FLAT_DIR = 'https://gaftp.epa.gov/Air/nei/2023/flat_files/';
+const STACKS_METADATA_PATH = path.join(__dirname, '..', 'src', 'lib', 'nei_2023_stacks_metadata.json');
 const ARCGIS_BASE = 'https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/Air_Quality_Design_Values_for_Criteria_Pollutants/FeatureServer';
 const DV_INDEX_URL = 'https://www.epa.gov/air-trends/air-quality-design-values';
 const DV_PREFIXES = ['o3', 'pm25', 'pm10', 'so2', 'no2', 'co']; // the six workbooks the app reads
@@ -21,6 +24,18 @@ async function getNeiSummary() {
   if (!listing.ok) throw new Error(`GAFTP listing returned status code ${listing.status}`);
   const name = pickNeiSummary(await listing.text());
   const head = await fetch(NEI_DIR + name, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+  if (!head.ok) throw new Error(`GAFTP ${name} returned status code ${head.status}`);
+  return { name, lastModified: head.headers.get('last-modified') || '' };
+}
+
+async function getNeiPointFile() {
+  const listing = await fetch(NEI_FLAT_DIR, { signal: AbortSignal.timeout(15000) });
+  if (!listing.ok) throw new Error(`GAFTP flat_files listing returned status code ${listing.status}`);
+  const names = [...(await listing.text()).matchAll(/href="(SmokeFlatFile_POINT_(\d{8})\.zip)"/g)]
+    .sort((a, b) => Number(a[2]) - Number(b[2]));
+  if (!names.length) throw new Error('No SmokeFlatFile_POINT_*.zip in the GAFTP flat_files listing');
+  const name = names.at(-1)[1];
+  const head = await fetch(NEI_FLAT_DIR + name, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
   if (!head.ok) throw new Error(`GAFTP ${name} returned status code ${head.status}`);
   return { name, lastModified: head.headers.get('last-modified') || '' };
 }
@@ -102,6 +117,27 @@ async function main() {
   } catch (err) {
     console.error('[NEI 2023] Audit failed:', err.message);
     failures.push(`NEI 2023: ${err.message}`);
+  }
+
+  // 1b. Audit the NEI 2023 point flat file behind the stack parameters
+  try {
+    const { name: remoteName, lastModified: remoteModified } = await getNeiPointFile();
+    let local = {};
+    if (fs.existsSync(STACKS_METADATA_PATH)) {
+      local = JSON.parse(fs.readFileSync(STACKS_METADATA_PATH, 'utf8'));
+    }
+    console.log(`[NEI 2023 stacks] Remote file: ${remoteName}, Last-Modified "${remoteModified}"`);
+    console.log(`[NEI 2023 stacks] Local file:  ${local.file || 'None'}, Last-Modified "${local.lastModified || ''}"`);
+
+    if (remoteName !== local.file || (remoteModified && remoteModified !== local.lastModified)) {
+      updateNeeded = true;
+      updateMessages.push(`- **NEI 2023 Stack Parameters Update Available**: EPA posted a newer point flat file.\n  * Remote file: \`${remoteName}\` (Last-Modified \`${remoteModified}\`)\n  * Local file: \`${local.file || 'None'}\` (Last-Modified \`${local.lastModified || 'None'}\`)\n  * Rebuild with \`node scripts/sync_nei_stacks.mjs\` (or POST /api/sync-nei locally).`);
+    } else {
+      console.log('[NEI 2023 stacks] Dataset is up-to-date.');
+    }
+  } catch (err) {
+    console.error('[NEI 2023 stacks] Audit failed:', err.message);
+    failures.push(`NEI 2023 stacks: ${err.message}`);
   }
 
   // 2. Audit NAAQS Design Value sources. This is a health check only: the app reads

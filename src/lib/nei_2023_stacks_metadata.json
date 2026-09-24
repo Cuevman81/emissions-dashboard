@@ -1,0 +1,23 @@
+{
+  "file": "SmokeFlatFile_POINT_20260720.zip",
+  "url": "https://gaftp.epa.gov/Air/nei/2023/flat_files/SmokeFlatFile_POINT_20260720.zip",
+  "lastModified": "Tue, 21 Jul 2026 15:37:40 GMT",
+  "size": 265494195,
+  "neiYear": 2023,
+  "inventoryVersion": "General Purpose Release",
+  "creationDate": "20260720 03:07",
+  "lastSynced": "2026-09-24T00:02:44.136Z",
+  "rows": 11758839,
+  "stateRows": 87072,
+  "releasePoints": 2421,
+  "facilityCount": 260,
+  "stackCount": 1924,
+  "droppedByType": {
+    "1": 496,
+    "8": 1
+  },
+  "flagCounts": {
+    "ERPVelCompute": 5,
+    "TempZero": 97
+  }
+}

@@ -26,15 +26,37 @@ const aermodSrcId = (id?: string) => ((id ?? '').replace(/[^A-Za-z0-9]/g, '') ||
 // and its parameters follow on
 //   SO SRCPARAM Srcid Ptemis(g/s) Stkhgt(m) Stktmp(K) Stkvel(m/s) Stkdia(m)
 // (AERMOD User's Guide, EPA-454/B-26-001, Sec. 3.3.1-3.3.2).
+// Capped and horizontal stacks use the POINTCAP and POINTHOR source types, with the actual
+// stack parameters on SRCPARAM "as if the release were a non-capped vertical point source"
+// (same guide, Sec. 3.2.2; AERMOD Implementation Guide EPA-454/B-26-002, Sec. 6.1).
+// NEI release point types: 3 = horizontal, 5 = vertical with rain cap.
+const AERMOD_SOURCE_TYPE: Record<number, string> = { 3: 'POINTHOR', 5: 'POINTCAP' };
+
 function buildAermodLine(s: StackParameter): string {
   const id = aermodSrcId(s.stackId);
+  const srcType = (s.releaseTypeCode && AERMOD_SOURCE_TYPE[s.releaseTypeCode]) || 'POINT';
   const hm = s.height ? ftToM(s.height) : '?.??';
-  const tk = s.temp != null ? fToK(s.temp) : '?.??';
+  // An NEI exit temperature of exactly 0 °F is usually a placeholder; left for the user to fill
+  const tk = s.temp != null && !s.flags?.includes('TempZero') ? fToK(s.temp) : '?.??';
   const vm = s.velocity != null ? fpsToMs(s.velocity) : '?.??';
   const dm = s.diameter ? ftToM(s.diameter) : '?.??';
   // Location (UTM m, base elevation m) and emission rate (g/s) are project-specific — user fills in
-  return `SO LOCATION  ${id}  POINT  <x_m>  <y_m>  <zelev_m>\nSO SRCPARAM  ${id}  <em_gs>  ${hm}  ${tk}  ${vm}  ${dm}`;
+  return `SO LOCATION  ${id}  ${srcType}  <x_m>  <y_m>  <zelev_m>\nSO SRCPARAM  ${id}  <em_gs>  ${hm}  ${tk}  ${vm}  ${dm}`;
 }
+
+// Data-quality notes for NEI release points. The ERP* keywords are EPA's own, written into
+// the NEI flat file's COMMENT column when EPA computed or reset a release parameter.
+const FLAG_NOTES: Record<string, string> = {
+  ERPVelCompute: 'Exit velocity computed by EPA from the flow rate and diameter (NEI flag ERPVelCompute).',
+  ERPVelRange: 'Exit velocity was outside the EIS range; EPA reset it to the range limit (NEI flag ERPVelRange).',
+  ERPHtRange: 'Stack height was outside the EIS range; EPA reset it to the range limit (NEI flag ERPHtRange).',
+  ERPDiamRange: 'Diameter was outside the EIS range; EPA reset it to the range limit (NEI flag ERPDiamRange).',
+  ERPTempRange: 'Exit temperature was outside the allowed range; EPA reset it to the range limit (NEI flag ERPTempRange).',
+  ERPCokeoven126: 'Coke-oven release: EPA raised the height to 126 ft (NEI flag ERPCokeoven126).',
+  TempZero: 'Exit temperature reported as 0 °F, usually a placeholder. AERMOD reads Stktmp 0 as "ambient", so confirm it; the AERMOD line leaves it as ?.??.',
+};
+
+const STACK_LIST_LIMIT = 10;
 
 function AermodCopyButton({ line }: { line: string }) {
   const [copied, setCopied] = useState(false);
@@ -63,6 +85,9 @@ function AermodCopyButton({ line }: { line: string }) {
 
 export default function StackInventory({ stacks, loading, facilityName, camdId, onUpload }: StackInventoryProps) {
   const [showManualForm, setShowManualForm] = useState(false);
+  const [showAllStacks, setShowAllStacks] = useState(false);
+  const neiCount = stacks.filter(s => s.dataSource === 'NEI').length;
+  const visibleStacks = showAllStacks ? stacks : stacks.slice(0, STACK_LIST_LIMIT);
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -111,7 +136,12 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
         </div>
       ) : stacks.length > 0 ? (
         <div className="space-y-3">
-          {stacks.map((s, i) => {
+          {neiCount > 0 && (
+            <p className="text-[10px] text-slate-500 leading-relaxed">
+              {neiCount} stack release point{neiCount === 1 ? '' : 's'} from the NEI {stacks[0].dataYear}, tallest first. Fugitive release points are not listed.
+            </p>
+          )}
+          {visibleStacks.map((s, i) => {
             const aermodLine = buildAermodLine(s);
             return (
               <div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 hover:border-blue-200 transition-all shadow-sm">
@@ -130,9 +160,19 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
                       Source: CAMD/CAMPD · {s.dataYear || 'Live'}
                     </span>
                   )}
+                  {s.dataSource === 'NEI' && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 border border-violet-200">
+                      Source: NEI {s.dataYear} release points
+                    </span>
+                  )}
+                  {s.dataSource === 'NEI' && s.releaseType && (
+                    <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                      {s.releaseType}
+                    </span>
+                  )}
                   {s.dataSource === 'Estimate' && (
                     <span className="text-[8px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
-                      ⚠ Estimated · NAICS Industry Median
+                      ⚠ Industry-median estimate · RSEI by NAICS
                     </span>
                   )}
                   {s.dataSource === 'User' && (
@@ -177,6 +217,21 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
                   )}
                 </div>
 
+                {/* NEI data-quality notes */}
+                {(s.flags?.some(f => FLAG_NOTES[f]) || (s.missing && s.missing.length > 0) || s.releaseTypeCode === 4 || s.releaseTypeCode === 6) && (
+                  <ul className="mb-3 space-y-1">
+                    {s.flags?.filter(f => FLAG_NOTES[f]).map(f => (
+                      <li key={f} className="text-[9px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1">⚠ {FLAG_NOTES[f]}</li>
+                    ))}
+                    {s.missing && s.missing.length > 0 && (
+                      <li className="text-[9px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1">⚠ The NEI has no value for: {s.missing.join(', ')}.</li>
+                    )}
+                    {(s.releaseTypeCode === 4 || s.releaseTypeCode === 6) && (
+                      <li className="text-[9px] text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1">⚠ {s.releaseType}: AERMOD&apos;s POINTCAP/POINTHOR cover capped and horizontal stacks only. The line uses POINT; review the source type.</li>
+                    )}
+                  </ul>
+                )}
+
                 {/* AERMOD preview line */}
                 <div className="bg-slate-900 rounded p-2 mt-1">
                   <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-1">AERMOD SO LOCATION / SRCPARAM</p>
@@ -186,6 +241,14 @@ export default function StackInventory({ stacks, loading, facilityName, camdId, 
               </div>
             );
           })}
+          {stacks.length > STACK_LIST_LIMIT && (
+            <button
+              onClick={() => setShowAllStacks(!showAllStacks)}
+              className="w-full text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 py-2 rounded-lg transition-colors"
+            >
+              {showAllStacks ? `Show the first ${STACK_LIST_LIMIT} only` : `Show all ${stacks.length} stacks`}
+            </button>
+          )}
         </div>
       ) : (
         <div className="text-center py-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 px-5">

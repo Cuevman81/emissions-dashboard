@@ -79,6 +79,7 @@ export default function PsdTab({
       setStacksLoading(true);
       const stackParams = new URLSearchParams({ registryId: selectedFacility.id });
       if (selectedFacility.camdId) stackParams.set('camdId', selectedFacility.camdId);
+      if (selectedFacility.eisId) stackParams.set('eisId', selectedFacility.eisId);
       if (selectedFacility.naics) stackParams.set('naics', selectedFacility.naics);
       if (selectedFacility.sector) stackParams.set('sector', selectedFacility.sector);
       const stackRes = await fetch(`/api/stacks?${stackParams}`);
@@ -564,6 +565,7 @@ export default function PsdTab({
       })()}
 
       <StackInventory
+        key={selectedFacility.id}
         stacks={stacks}
         loading={stacksLoading}
         facilityName={selectedFacility.name}

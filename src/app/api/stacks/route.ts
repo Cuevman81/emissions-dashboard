@@ -1,9 +1,23 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import type { StackParameter } from '@/lib/data-service';
 
 const CACHE_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'src', 'cache');
 const CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+// Built offline by scripts/sync_nei_stacks.mjs from EPA's 2023 NEI point flat file
+const NEI_STACKS_PATH = path.join(process.cwd(), 'src', 'lib', 'nei_2023_stacks_MS.json');
+
+const SOURCE_LABELS = {
+  CAMD: 'CAMD monitor plan',
+  NEI: 'NEI 2023 release points',
+  Estimate: 'industry-median estimate',
+} as const;
+type StackSource = keyof typeof SOURCE_LABELS;
+
+function stacksResponse(stacks: StackParameter[], source: StackSource) {
+  return NextResponse.json(stacks, { headers: { 'X-Stack-Source': SOURCE_LABELS[source] } });
+}
 
 async function fetchCamdStackParameters(orisCode: string) {
   const apiKey = process.env.EPA_CAMD_API_KEY || '';
@@ -60,6 +74,7 @@ async function fetchCamdStackParameters(orisCode: string) {
                 diameter,
                 description: `EGU Unit (CAMD/CEMS locId: ${locId})`,
                 dataSource: 'CAMD',
+                sourceLabel: SOURCE_LABELS.CAMD,
                 dataYear: String(new Date().getFullYear()),
               });
             }
@@ -74,6 +89,70 @@ async function fetchCamdStackParameters(orisCode: string) {
   } catch {
     return null;
   }
+}
+
+interface NeiStack {
+  id: string;
+  rp: string;
+  type: number;
+  height: number | null;
+  diameter: number | null;
+  temp: number | null;
+  velocity: number | null;
+  flow: number | null;
+  lat: number | null;
+  lon: number | null;
+  missing?: string[];
+  flags?: string[];
+}
+interface NeiStackData {
+  neiYear: number;
+  types: Record<string, string>;
+  facilities: Record<string, { name: string; stacks: NeiStack[] }>;
+}
+
+// Parsed once per server instance; re-read if a local sync rewrites the file.
+let neiStackCache: { mtimeMs: number; data: NeiStackData } | null = null;
+
+function loadNeiStacks(): NeiStackData | null {
+  try {
+    const { mtimeMs } = fs.statSync(NEI_STACKS_PATH);
+    if (!neiStackCache || neiStackCache.mtimeMs !== mtimeMs) {
+      neiStackCache = { mtimeMs, data: JSON.parse(fs.readFileSync(NEI_STACKS_PATH, 'utf8')) };
+    }
+    return neiStackCache.data;
+  } catch (err) {
+    console.error('Failed to read NEI stack dataset:', err);
+    return null;
+  }
+}
+
+// NEI release points (stacks only; fugitives were dropped when the file was built), in
+// the NEI's own units, which are the app's: ft, ft, deg F, ft/s, ft3/s. No conversion here.
+function getNeiStacks(eisId: string): StackParameter[] | null {
+  const data = loadNeiStacks();
+  const facility = data?.facilities[eisId];
+  if (!data || !facility || facility.stacks.length === 0) return null;
+  const year = String(data.neiYear);
+  return facility.stacks.map((s) => ({
+    stackId: s.id,
+    height: s.height ?? 0,
+    diameter: s.diameter ?? 0,
+    temp: s.temp ?? undefined,
+    velocity: s.velocity ?? undefined,
+    flowRate: s.flow ?? undefined,
+    releaseType: data.types[String(s.type)] || `Type ${s.type}`,
+    releaseTypeCode: s.type,
+    releasePointId: s.rp,
+    lat: s.lat ?? undefined,
+    lon: s.lon ?? undefined,
+    flags: s.flags,
+    missing: s.missing,
+    description: `NEI ${year} release point ${s.rp}`,
+    dataSource: 'NEI' as const,
+    sourceLabel: SOURCE_LABELS.NEI,
+    dataYear: year,
+  }));
 }
 
 function getFallbackIndustryStacks(naics: string | null, sector: string | null): any[] {
@@ -157,6 +236,7 @@ function getFallbackIndustryStacks(naics: string | null, sector: string | null):
       velocity,
       description: `Estimated Industry Standard (EPA RSEI Median for ${sectorName})`,
       dataSource: 'Estimate' as const,
+      sourceLabel: SOURCE_LABELS.Estimate,
       dataYear: undefined,
     }
   ];
@@ -170,6 +250,9 @@ export async function GET(request: Request) {
   const camdId = camdIdRaw && /^\d+$/.test(camdIdRaw) ? camdIdRaw : null;
   const naics = searchParams.get('naics');
   const sector = searchParams.get('sector');
+  // EIS facility IDs are numeric (from ECHO's EisIDs field)
+  const eisIdRaw = searchParams.get('eisId');
+  const eisId = eisIdRaw && /^\d+$/.test(eisIdRaw) ? eisIdRaw : null;
 
   if (!registryId) {
     return NextResponse.json([], { status: 400 });
@@ -187,7 +270,7 @@ export async function GET(request: Request) {
         if (Date.now() - stats.mtimeMs < CACHE_TTL) {
           console.log(`[Cache] Loading CAMD stacks for ${camdId} from disk...`);
           const cachedData = fs.readFileSync(cachePath, 'utf8');
-          return NextResponse.json(JSON.parse(cachedData));
+          return stacksResponse(JSON.parse(cachedData), 'CAMD');
         }
       } catch (cacheErr) {
         console.error('Failed to read CAMD stacks cache:', cacheErr);
@@ -210,17 +293,23 @@ export async function GET(request: Request) {
         console.error('Failed to write CAMD stacks cache:', cacheErr);
       }
 
-      return NextResponse.json(camdStacks);
+      return stacksResponse(camdStacks, 'CAMD');
     }
   }
 
-  // --- Path 2: RSEI median industry fallback ---
-  // Non-EGUs (and EGUs CAMD had nothing for) get estimates. Envirofacts retired
-  // EIS_RELEASE_POINT (it answers 404 "The table is not available.", checked
-  // 2026-09-23), so there is no per-facility release-point query to try first.
-  // The keyless alternative, the national 2023 NEI SMOKE point flat file
-  // (gaftp.epa.gov/Air/nei/2023/flat_files, 253 MB zip), is too big to fetch here.
-  console.log(`Stacks: returning fallback for registryId ${registryId} (naics: ${naics}, sector: ${sector})`);
+  // --- Path 2: NEI 2023 release points (Mississippi), from the packed dataset ---
+  // Envirofacts retired EIS_RELEASE_POINT (404 "The table is not available."), so the
+  // stacks come from the 2023 NEI point flat file, extracted offline.
+  if (eisId) {
+    const neiStacks = getNeiStacks(eisId);
+    if (neiStacks) {
+      console.log(`Stacks: ${neiStacks.length} NEI release points for EIS ${eisId}`);
+      return stacksResponse(neiStacks, 'NEI');
+    }
+  }
+
+  // --- Path 3: RSEI median industry fallback ---
+  console.log(`Stacks: returning fallback for registryId ${registryId} (eisId: ${eisId}, naics: ${naics}, sector: ${sector})`);
   const fallbackStacks = getFallbackIndustryStacks(naics, sector);
-  return NextResponse.json(fallbackStacks);
+  return stacksResponse(fallbackStacks, 'Estimate');
 }

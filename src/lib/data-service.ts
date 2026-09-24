@@ -57,6 +57,8 @@ export interface Facility {
   hasNei2023?: boolean;     // True if facility has 2023 NEI data
 }
 
+// Units: height and diameter ft, temp °F, velocity ft/s, flowRate ft³/s (the CAMD and
+// NEI units). StackInventory converts to m, K and m/s for display and the AERMOD lines.
 export interface StackParameter {
   stackId: string;
   height: number;
@@ -65,8 +67,17 @@ export interface StackParameter {
   velocity?: number;
   flowRate?: number;
   description?: string;
-  dataSource?: 'CAMD' | 'Estimate' | 'User';  // where the stack data came from
+  dataSource?: 'CAMD' | 'NEI' | 'Estimate' | 'User';  // where the stack data came from
+  sourceLabel?: string;                          // e.g. "NEI 2023 release points", "industry-median estimate"
   dataYear?: string;                             // year of the source data (e.g. the CAMD monitor-plan year)
+  // NEI release points only
+  releaseType?: string;                          // EIS release point type, e.g. "Vertical with rain cap"
+  releaseTypeCode?: number;                      // FF10 ERPTYPE: 2 vertical ... 6 downward-facing vent
+  releasePointId?: string;                       // EIS release point ID
+  lat?: number;
+  lon?: number;
+  flags?: string[];                              // data-quality flags (EPA ERP* keywords, TempZero, Missing)
+  missing?: string[];                            // parameters the NEI leaves blank or zero
 }
 
 export interface ToxicChemical {
@@ -262,7 +273,8 @@ export async function fetchNeiCounty(lat: number, lon: number): Promise<NeiCount
 }
 
 /**
- * Fetch Stack Parameters for a facility (CAMD monitor plans for EGUs, else RSEI industry-median estimates)
+ * Fetch Stack Parameters for a facility (CAMD monitor plans for EGUs, else NEI 2023 release
+ * points, else RSEI industry-median estimates)
  */
 export async function fetchStackParameters(facilityId: string): Promise<StackParameter[]> {
   try {

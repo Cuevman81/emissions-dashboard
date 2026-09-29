@@ -173,12 +173,15 @@ export async function POST(request: Request) {
   }
   const force = new URL(request.url).searchParams.get('force') === 'true';
 
-  // One rebuild at a time: dev mode runs the page's sync effect twice, and a second
-  // request must not start a second 253 MB download into the same temp file.
+  // One rebuild of each dataset at a time: overlapping requests (dev mode runs the
+  // page's sync effect twice, or two tabs open at once) would otherwise download into
+  // the same temp zip, and one run could unzip it while the other is still writing it.
+  // A request that arrives mid-run shares that run's result.
   stacksSyncInFlight ??= syncStacks(force).finally(() => { stacksSyncInFlight = null; });
   const stacksPart = stacksSyncInFlight;
 
-  const facilitiesPart = syncFacilitySummary(force);
+  facilitySyncInFlight ??= syncFacilitySummary(force).finally(() => { facilitySyncInFlight = null; });
+  const facilitiesPart = facilitySyncInFlight;
   const [facilities, stacks] = await Promise.all([facilitiesPart, stacksPart]);
   const success = facilities.success && stacks.status !== 'failed';
   return NextResponse.json({ ...facilities, success, stacks }, { status: success ? 200 : 500 });
@@ -203,6 +206,8 @@ async function syncStacks(force: boolean): Promise<StacksSyncResult> {
     return { status: 'failed', error: errorMessage(err) };
   }
 }
+
+let facilitySyncInFlight: ReturnType<typeof syncFacilitySummary> | null = null;
 
 async function syncFacilitySummary(force: boolean) {
   try {

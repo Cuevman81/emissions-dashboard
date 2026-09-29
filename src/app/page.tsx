@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   STATE_CENTERS,
@@ -69,12 +69,18 @@ export default function EmissionsDashboard() {
     }
   }, [dispatch, selectedStateRef]);
 
+  // Dev mode runs mount effects twice; check for (and start) an NEI sync only once per page load
+  const neiSyncCheckedRef = useRef(false);
+
   useEffect(() => {
     dispatch({ type: 'SET_MOUNTED' });
     fetch('/api/sync-tri')
       .then(res => res.json())
       .then(data => console.log('[Sync TRI] Initial check completed:', data))
       .catch(err => console.error('[Sync TRI] Failed to trigger sync check:', err));
+
+    if (neiSyncCheckedRef.current) return;
+    neiSyncCheckedRef.current = true;
 
     // Abort signal with a 3-second timeout for the GAFTP update check
     fetch('/api/sync-nei?checkOnly=true', { signal: AbortSignal.timeout(3000) })

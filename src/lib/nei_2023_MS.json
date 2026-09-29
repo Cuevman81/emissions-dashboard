@@ -5177,17 +5177,6 @@
     "year": 2023,
     "source": "NEI 2023 v1"
   },
-  "6952011": {
-    "eisId": "6952011",
-    "facilityName": "Protein Products, Inc.",
-    "county": "Sunflower",
-    "fips": "28133",
-    "naics": "311710",
-    "emissions": [],
-    "haps": [],
-    "year": 2023,
-    "source": "NEI 2023 v1"
-  },
   "6952811": {
     "eisId": "6952811",
     "facilityName": "TRUNKLINE GAS COMPANY, LLC, INDEPENDENCE",
@@ -59682,17 +59671,6 @@
     "year": 2023,
     "source": "NEI 2023 v1"
   },
-  "15438811": {
-    "eisId": "15438811",
-    "facilityName": "University of Mississippi Medical Center",
-    "county": "Hinds",
-    "fips": "28049",
-    "naics": "611310",
-    "emissions": [],
-    "haps": [],
-    "year": 2023,
-    "source": "NEI 2023 v1"
-  },
   "15494111": {
     "eisId": "15494111",
     "facilityName": "FIBER GLASS SYSTEMS LP IUKA FRP FACILITY",
@@ -60628,17 +60606,6 @@
         "unit": "TPY"
       }
     ],
-    "year": 2023,
-    "source": "NEI 2023 v1"
-  },
-  "15619711": {
-    "eisId": "15619711",
-    "facilityName": "Southeast Supply Header LLC, Gwinville Compressor Station",
-    "county": "Jefferson Davis",
-    "fips": "28065",
-    "naics": "221210",
-    "emissions": [],
-    "haps": [],
     "year": 2023,
     "source": "NEI 2023 v1"
   },

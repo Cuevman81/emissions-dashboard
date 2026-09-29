@@ -98,7 +98,7 @@ Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Di
 
 ## Automated Data Freshness
 
-A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the upstream EPA sources — NEI GAFTP dataset versions (facility summary and point flat file), new TRI reporting years, ECHO facility inventory drift, and new CAMD data years (only when the `EPA_CAMD_API_KEY` repository secret is set) — and opens a GitHub Issue when an update is available. It also checks that both NAAQS design value sources still answer (the app picks up new design value years at runtime), and the run fails if any check errors.
+A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the upstream EPA sources — NEI GAFTP dataset versions (facility summary and point flat file), new TRI reporting years, ECHO facility inventory drift, and new CAMD data years (only when the `EPA_CAMD_API_KEY` repository secret is set) — and opens a GitHub Issue when an update is available. It also checks that both NAAQS design value sources still answer (the app picks up new design value years at runtime), and the run fails if any check errors. The ECHO check retries server errors a few times over about two minutes, so a brief EPA blip doesn't fail the run.
 
 ---
 
@@ -107,7 +107,7 @@ A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the 
 This application is fully optimized for serverless deployment on Vercel:
 * **Serverless Caching**: Automatically falls back to `/tmp` in serverless environments for API response caches, preventing read-only filesystem crashes.
 * **Stateless Operation**: Pre-compiled datasets (NEI 2023 emissions and stack parameters, TRI emissions, facility seed) are packed with the build for instant load times without external database dependencies; sync endpoints are disabled serverlessly; the daily GitHub Action flags data updates, which are then synced locally, committed and redeployed.
-* **Cold-Start Resilience**: The facility roster is served from a committed seed file within a bounded time budget when live EPA APIs are slow.
+* **Cold-Start Resilience**: The facility roster is served from a committed seed file within a bounded time budget when live EPA APIs are slow. Refresh the seed now and then with `node scripts/refresh_facilities_seed.mjs` (Node 22.18+), then commit and push it; the script retries ECHO patiently and refuses to write an incomplete roster.
 * **Security Headers**: `nosniff`, frame protection, referrer and permissions policies, and a Content-Security-Policy applied globally. Production builds enforce the full CSP, so a new third-party host (tile server, CDN) must be added to `CSP_PRODUCTION` in `next.config.ts`.
 
 Remember to set `AQS_EMAIL`, `AQS_KEY`, and `EPA_CAMD_API_KEY` in the Vercel project's environment variables.

@@ -67,6 +67,31 @@ async function getTriFormCount(year) {
   return n;
 }
 
+// ECHO drops requests during maintenance and capacity blips (on 29 Sep 2026 most
+// requests got a 503 for hours, with the odd one getting through). Retry server-side
+// trouble a few times so a brief blip does not fail the daily run; an outage that
+// outlasts the retries still fails it.
+const RETRY_DELAYS_MS = [15000, 30000, 60000];
+
+async function fetchWithRetry(url, options, label) {
+  for (let attempt = 0; ; attempt++) {
+    let problem;
+    try {
+      const res = await fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
+      // Only 5xx and 429 are worth retrying; any other status goes back to the caller
+      if (res.status < 500 && res.status !== 429) return res;
+      problem = `API returned status ${res.status}`;
+    } catch (err) {
+      problem = err.message; // network error or timeout
+    }
+    if (attempt >= RETRY_DELAYS_MS.length) {
+      throw new Error(`${problem} (after ${attempt + 1} attempts)`);
+    }
+    console.warn(`[${label}] ${problem}; retrying in ${RETRY_DELAYS_MS[attempt] / 1000}s (attempt ${attempt + 1} of ${RETRY_DELAYS_MS.length + 1})...`);
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+  }
+}
+
 async function getArcgisLatestYear() {
   const layerId = 1; // Ozone (representative criteria pollutant)
   const params = new URLSearchParams({
@@ -198,10 +223,7 @@ async function main() {
   try {
     console.log('[ECHO] Checking active Mississippi facility count...');
     const echoUrl = 'https://echodata.epa.gov/echo/air_rest_services.get_facilities?p_st=MS&p_act=Y&output=JSON';
-    const resEcho = await fetch(echoUrl, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(15000)
-    });
+    const resEcho = await fetchWithRetry(echoUrl, { headers: { 'Accept': 'application/json' } }, 'ECHO');
     if (resEcho.ok) {
       const dataEcho = await resEcho.json();
       const results = dataEcho?.Results;

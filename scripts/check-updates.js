@@ -69,9 +69,9 @@ async function getTriFormCount(year) {
 
 // ECHO drops requests during maintenance and capacity blips (on 29 Sep 2026 most
 // requests got a 503 for hours, with the odd one getting through). Retry server-side
-// trouble a few times so a brief blip does not fail the daily run; an outage that
-// outlasts the retries still fails it.
-const RETRY_DELAYS_MS = [15000, 30000, 60000];
+// trouble for about 10 minutes (8 attempts) so a blip or a flapping service does not
+// fail the daily run; an outage that outlasts the retries still fails it.
+const RETRY_DELAYS_MS = [15000, 30000, 60000, 120000, 120000, 120000, 120000];
 
 async function fetchWithRetry(url, options, label) {
   for (let attempt = 0; ; attempt++) {

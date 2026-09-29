@@ -98,7 +98,7 @@ Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Di
 
 ## Automated Data Freshness
 
-A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the upstream EPA sources — NEI GAFTP dataset versions (facility summary and point flat file), new TRI reporting years, ECHO facility inventory drift, and new CAMD data years (only when the `EPA_CAMD_API_KEY` repository secret is set) — and opens a GitHub Issue when an update is available. It also checks that both NAAQS design value sources still answer (the app picks up new design value years at runtime), and the run fails if any check errors. The ECHO check retries server errors a few times over about two minutes, so a brief EPA blip doesn't fail the run.
+A daily GitHub Action (`.github/workflows/data-freshness-check.yml`) audits the upstream EPA sources — NEI GAFTP dataset versions (facility summary and point flat file), new TRI reporting years, ECHO facility inventory drift, and new CAMD data years (only when the `EPA_CAMD_API_KEY` repository secret is set) — and opens a GitHub Issue when an update is available. It also checks that both NAAQS design value sources still answer (the app picks up new design value years at runtime), and the run fails if any check errors. The ECHO check retries server errors for about ten minutes, so a brief or flapping EPA outage doesn't fail the run.
 
 ---
 

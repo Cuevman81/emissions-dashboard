@@ -10,6 +10,35 @@ const ARCGIS_BASE = 'https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/se
 const DV_INDEX_URL = 'https://www.epa.gov/air-trends/air-quality-design-values';
 const DV_PREFIXES = ['o3', 'pm25', 'pm10', 'so2', 'no2', 'co']; // the six workbooks the app reads
 
+// EPA services drop requests during maintenance and capacity blips (on 29 Sep 2026
+// ECHO gave most requests a 503 for hours, and on 3 Oct 2026 one NAAQS request lost
+// its connection outright). Every EPA call retries server-side trouble for about 10
+// minutes (8 attempts) so a blip or a flapping service does not fail the daily run;
+// an outage that outlasts the retries still fails it.
+const RETRY_DELAYS_MS = [15000, 30000, 60000, 120000, 120000, 120000, 120000];
+
+async function fetchWithRetry(url, options = {}, label = new URL(url).host) {
+  const { timeoutMs = 15000, ...fetchOptions } = options;
+  for (let attempt = 0; ; attempt++) {
+    let problem;
+    try {
+      const res = await fetch(url, { ...fetchOptions, signal: AbortSignal.timeout(timeoutMs) });
+      // Only 5xx and 429 are worth retrying; any other status goes back to the caller
+      if (res.status < 500 && res.status !== 429) return res;
+      problem = `status ${res.status}`;
+    } catch (err) {
+      // Network error or timeout; Node's bare "fetch failed" hides the reason in err.cause
+      const cause = err.cause?.code || err.cause?.message;
+      problem = cause ? `${err.message} (${cause})` : err.message;
+    }
+    if (attempt >= RETRY_DELAYS_MS.length) {
+      throw new Error(`${label} ${problem} after ${attempt + 1} attempts`);
+    }
+    console.warn(`[${label}] ${problem}; retrying in ${RETRY_DELAYS_MS[attempt] / 1000}s (attempt ${attempt + 1} of ${RETRY_DELAYS_MS.length + 1})...`);
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+  }
+}
+
 // EPA renames the facility summary on each re-release (eis_report_37583_... became
 // eis_report_38234_..._21jul2026.zip on 22 Jul 2026), so find it by listing the folder.
 function pickNeiSummary(html) {
@@ -20,22 +49,22 @@ function pickNeiSummary(html) {
 }
 
 async function getNeiSummary() {
-  const listing = await fetch(NEI_DIR, { signal: AbortSignal.timeout(15000) });
+  const listing = await fetchWithRetry(NEI_DIR, {}, 'GAFTP');
   if (!listing.ok) throw new Error(`GAFTP listing returned status code ${listing.status}`);
   const name = pickNeiSummary(await listing.text());
-  const head = await fetch(NEI_DIR + name, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+  const head = await fetchWithRetry(NEI_DIR + name, { method: 'HEAD', timeoutMs: 10000 }, 'GAFTP');
   if (!head.ok) throw new Error(`GAFTP ${name} returned status code ${head.status}`);
   return { name, lastModified: head.headers.get('last-modified') || '' };
 }
 
 async function getNeiPointFile() {
-  const listing = await fetch(NEI_FLAT_DIR, { signal: AbortSignal.timeout(15000) });
+  const listing = await fetchWithRetry(NEI_FLAT_DIR, {}, 'GAFTP');
   if (!listing.ok) throw new Error(`GAFTP flat_files listing returned status code ${listing.status}`);
   const names = [...(await listing.text()).matchAll(/href="(SmokeFlatFile_POINT_(\d{8})\.zip)"/g)]
     .sort((a, b) => Number(a[2]) - Number(b[2]));
   if (!names.length) throw new Error('No SmokeFlatFile_POINT_*.zip in the GAFTP flat_files listing');
   const name = names.at(-1)[1];
-  const head = await fetch(NEI_FLAT_DIR + name, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+  const head = await fetchWithRetry(NEI_FLAT_DIR + name, { method: 'HEAD', timeoutMs: 10000 }, 'GAFTP');
   if (!head.ok) throw new Error(`GAFTP ${name} returned status code ${head.status}`);
   return { name, lastModified: head.headers.get('last-modified') || '' };
 }
@@ -43,7 +72,7 @@ async function getNeiPointFile() {
 // Newest design-value year that all six EPA workbooks have reached (the same rule
 // the app uses in src/lib/epa-dv-reports.ts).
 async function getXlsxCommonYear() {
-  const res = await fetch(DV_INDEX_URL, { signal: AbortSignal.timeout(20000) });
+  const res = await fetchWithRetry(DV_INDEX_URL, { timeoutMs: 20000 }, 'EPA design value index');
   if (!res.ok) throw new Error(`EPA design value index returned status code ${res.status}`);
   const html = await res.text();
   const newest = {};
@@ -60,36 +89,11 @@ async function getXlsxCommonYear() {
 // operator: with it this join returns [] even for published years.
 async function getTriFormCount(year) {
   const url = `https://data.epa.gov/efservice/TRI_REPORTING_FORM/REPORTING_YEAR/${year}/join/TRI_FACILITY/state_abbr/MS/count/JSON`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  const res = await fetchWithRetry(url, { timeoutMs: 30000 }, 'Envirofacts');
   if (!res.ok) throw new Error(`Envirofacts count for ${year} returned status code ${res.status}`);
   const n = Number((await res.json())?.[0]?.TOTALQUERYRESULTS);
   if (!Number.isFinite(n)) throw new Error(`Unexpected Envirofacts count response for ${year}`);
   return n;
-}
-
-// ECHO drops requests during maintenance and capacity blips (on 29 Sep 2026 most
-// requests got a 503 for hours, with the odd one getting through). Retry server-side
-// trouble for about 10 minutes (8 attempts) so a blip or a flapping service does not
-// fail the daily run; an outage that outlasts the retries still fails it.
-const RETRY_DELAYS_MS = [15000, 30000, 60000, 120000, 120000, 120000, 120000];
-
-async function fetchWithRetry(url, options, label) {
-  for (let attempt = 0; ; attempt++) {
-    let problem;
-    try {
-      const res = await fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
-      // Only 5xx and 429 are worth retrying; any other status goes back to the caller
-      if (res.status < 500 && res.status !== 429) return res;
-      problem = `API returned status ${res.status}`;
-    } catch (err) {
-      problem = err.message; // network error or timeout
-    }
-    if (attempt >= RETRY_DELAYS_MS.length) {
-      throw new Error(`${problem} (after ${attempt + 1} attempts)`);
-    }
-    console.warn(`[${label}] ${problem}; retrying in ${RETRY_DELAYS_MS[attempt] / 1000}s (attempt ${attempt + 1} of ${RETRY_DELAYS_MS.length + 1})...`);
-    await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-  }
 }
 
 async function getArcgisLatestYear() {
@@ -102,7 +106,7 @@ async function getArcgisLatestYear() {
     f: 'json',
   });
   const url = `${ARCGIS_BASE}/${layerId}/query?${params}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+  const res = await fetchWithRetry(url, { timeoutMs: 10000 }, 'ArcGIS');
   if (!res.ok) throw new Error(`ArcGIS returned status code ${res.status}`);
   const data = await res.json();
   const features = data.features || [];
@@ -266,13 +270,13 @@ async function main() {
       const nextCamdYear = 2027;
       console.log(`[CAMD/CAMPD] Checking EPA for year ${nextCamdYear}...`);
       const camdUrl = `https://api.epa.gov/easey/emissions-mgmt/emissions/apportioned/annual?page=1&perPage=1&year=${nextCamdYear}`;
-      const resCamd = await fetch(camdUrl, {
+      const resCamd = await fetchWithRetry(camdUrl, {
         headers: {
           'Accept': 'application/json',
           'x-api-key': apiKey
         },
-        signal: AbortSignal.timeout(10000)
-      });
+        timeoutMs: 10000
+      }, 'CAMPD');
       if (resCamd.ok) {
         const totalCountHeader = resCamd.headers.get('x-total-count');
         const totalCount = totalCountHeader ? parseInt(totalCountHeader, 10) : 0;

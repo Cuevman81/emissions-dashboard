@@ -4,6 +4,8 @@ An interactive web application designed for air quality analysis, Prevention of 
 
 Designed for the **Mississippi Department of Environmental Quality (MDEQ) Air Division**.
 
+![Facility proximity map of 1,148 Mississippi facilities with the data-freshness panel](docs/screenshot.png)
+
 ---
 
 ## Key Features
